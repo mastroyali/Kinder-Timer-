@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 app = FastAPI()
 
 CHILDREN_DATA = {
-    "ERIK": {
+    "ERIС": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0
@@ -171,7 +171,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>Мониторинг Наказаний</h2>
+    <h2>-= Ч У П Р А =-</h2>
     <div class="table" id="table-content"></div>
 </div>
 <script>
@@ -248,11 +248,11 @@ HTML_TEMPLATE = """
         if (!container) return;
         
         let html = `<div class="row header">
-            <div>Имя</div>
+            <div> </div>
             <div>1</div>
             <div>2</div>
             <div>3</div>
-            <div>Ячейка Х</div>
+            <div>ШТРАФ</div>
         </div>`;
         
         for (const [name, info] of Object.entries(data)) {
