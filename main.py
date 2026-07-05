@@ -45,9 +45,9 @@ HTML_TEMPLATE = """
         .row:last-child { border-bottom: none; }
         .header { font-weight: bold; color: #8b8b98; border-bottom: 2px solid #3d3d4e; padding-bottom: 10px; }
         .name-btn { background-color: #2b2b36; color: #fff; border: 1px solid #444454; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; text-align: left; }
-        .square { aspect-ratio: 1; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); }
+        .square { aspect-ratio: 1; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); min-height: 40px; }
         .gray { background-color: #3d3d4e; }
-        .green { background-color: #2e7d32; }
+        .yellow { background-color: #fbc02d; color: #000; text-shadow: none; }
         .orange { background-color: #ef6c00; }
         .red { background-color: #c62828; }
         .cell-x { background-color: #141419; border: 1px dashed #c62828; border-radius: 8px; height: 100%; display: flex; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; color: #ff5252; min-height: 45px; }
@@ -62,6 +62,29 @@ HTML_TEMPLATE = """
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsUrl = protocol + window.location.host + '/ws';
     let socket;
+    
+    // Функция для генерации чистого звука "Бип" без файлов
+    function playBeep() {
+        try {
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Частота звука (880 Гц — высокий писк)
+            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Громкость
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); // Плавное затухание
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2); // Длительность звука 0.2 секунды
+        } catch (e) {
+            console.log("Audio error:", e);
+        }
+    }
 
     function formatTime(seconds) {
         if (seconds <= 0) return "";
@@ -84,13 +107,15 @@ HTML_TEMPLATE = """
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            renderTable(JSON.parse(event.data));
+            const data = JSON.parse(event.data);
+            renderTable(data);
         };
         socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
     function renderTable(data) {
         const container = document.getElementById('table-content');
+        if (!container) return;
         let html = `<div class="row header"><div>Имя</div><div style="text-align:center">1</div><div style="text-align:center">2</div><div style="text-align:center">3</div><div style="text-align:center">Ячейка Х</div></div>`;
         for (const [name, info] of Object.entries(data)) {
             html += `<div class="row">
@@ -106,6 +131,7 @@ HTML_TEMPLATE = """
 
     function clickName(name) {
         if (socket && socket.readyState === WebSocket.OPEN) {
+            playBeep(); // Играем звук при нажатии
             socket.send(JSON.stringify({ "action": "click", "name": name }));
         }
     }
@@ -123,9 +149,9 @@ def handle_click(name: str):
     child = CHILDREN_DATA[name]
     squares = child["squares"]
     if squares[0] == "gray":
-        child["squares"][0] = "green"
+        child["squares"][0] = "yellow"
         child["timers"][0] = TIMER_DURATION
-    elif squares[0] == "green" and squares[1] == "gray":
+    elif squares[0] == "yellow" and squares[1] == "gray":
         child["squares"][1] = "orange"
         child["timers"][1] = TIMER_DURATION
     elif squares[1] == "orange" and squares[2] == "gray":
@@ -138,11 +164,21 @@ async def tick_processing():
     while True:
         await asyncio.sleep(1)
         for name, child in CHILDREN_DATA.items():
-            for i in range(3):
-                if child["timers"][i] > 0:
-                    child["timers"][i] -= 1
-                    if child["timers"][i] == 0:
-                        child["squares"][i] = "gray"
+            # Проверяем таймеры с конца (с 3-го по 1-й)
+            # Если активен более старший таймер, младшие стоят на паузе (заморожены)
+            if child["timers"][2] > 0:
+                child["timers"][2] -= 1
+                if child["timers"][2] == 0:
+                    child["squares"][2] = "gray"
+            elif child["timers"][1] > 0:
+                child["timers"][1] -= 1
+                if child["timers"][1] == 0:
+                    child["squares"][1] = "gray"
+            elif child["timers"][0] > 0:
+                child["timers"][0] -= 1
+                if child["timers"][0] == 0:
+                    child["squares"][0] = "gray"
+                    
         await broadcast_state()
 
 async def broadcast_state():
