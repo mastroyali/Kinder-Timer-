@@ -5,16 +5,19 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
+# Храним состояние: добавлен флаг режима редактирования для каждого ребенка
 CHILDREN_DATA = {
-    "ERIС": {
+    "ERIK": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
-        "penalty_minutes": 0
+        "penalty_minutes": 0,
+        "edit_mode": False
     },
     "NICK": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
-        "penalty_minutes": 0
+        "penalty_minutes": 0,
+        "edit_mode": False
     }
 }
 
@@ -36,7 +39,8 @@ HTML_TEMPLATE = """
             background-color: #141419;
             color: #ffffff;
             font-family: 'Segoe UI', Arial, sans-serif;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
             -webkit-user-select: none;
             user-select: none;
         }
@@ -45,7 +49,7 @@ HTML_TEMPLATE = """
             display: flex;
             flex-direction: column;
             width: 100vw; 
-            height: 100vh;
+            min-height: 100vh;
             box-sizing: border-box;
             padding: 2vh 2vw;
         }
@@ -54,124 +58,140 @@ HTML_TEMPLATE = """
             text-align: center; 
             color: #a0a0ab; 
             margin: 0 0 2vh 0; 
-            font-size: 4.5vh;
-            height: 5vh;
-            line-height: 5vh;
+            font-size: 4vh;
         }
         
         .table { 
             display: flex;
             flex-direction: column;
+            gap: 3vh;
             flex-grow: 1;
-            background-color: #1e1e24; 
-            border-radius: 16px; 
-            padding: 2vh; 
-            box-shadow: 0 12px 36px rgba(0,0,0,0.5); 
             box-sizing: border-box;
         }
         
-        .row { 
-            display: grid; 
-            grid-template-columns: 2.2fr 1fr 1fr 1fr 1.3fr; 
-            align-items: center; 
-            gap: 2vw; 
-            width: 100%;
-        }
-        
-        .header { 
-            height: 7vh;
-            font-weight: bold; 
-            color: #8b8b98; 
-            border-bottom: 3px solid #3d3d4e; 
-            font-size: 3.5vh;
-            text-align: center;
-        }
-        
-        .header div {
-            display: flex;
+        /* Адаптивная карточка для каждого ребенка */
+        .user-card {
+            background-color: #1e1e24; 
+            border-radius: 16px; 
+            padding: 2vh; 
+            box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+            border: 3px solid #3d3d4e;
+            transition: border-color 0.3s ease;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr 1.3fr;
+            gap: 15px;
             align-items: center;
-            justify-content: center;
-            height: 100%;
         }
-        
-        .header div:first-child {
-            justify-content: flex-start;
-            padding-left: 1vw;
-        }
-        
-        .row-user {
-            flex-grow: 1;
-            border-bottom: 1px solid #2d2d38;
-        }
-        
-        .row-user:last-child { 
-            border-bottom: none; 
+
+        /* Розовые рамки в режиме редактирования */
+        .user-card.edit-active {
+            border-color: #ff69b4 !important;
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.4);
         }
         
         .name-btn { 
             display: flex;
             align-items: center;
-            justify-content: flex-start;
+            justify-content: center;
             background-color: #2b2b36; 
             color: #fff; 
             border: 2px solid #444454; 
-            padding: 0 2vw; 
+            padding: 15px 10px; 
             border-radius: 14px; 
-            font-size: 5.5vh; 
+            font-size: 4vh; 
             font-weight: bold; 
             cursor: pointer; 
-            height: 75%;
             width: 100%;
             box-sizing: border-box;
             -webkit-appearance: none;
+            appearance: none;
+            background-image: none;
         }
         
         .name-btn:active {
             background-color: #3d3d4e;
         }
         
-        /* Четкая геометрия квадратов с рамками */
+        /* Идеальная геометрия квадратов во всех браузерах */
         .square { 
             aspect-ratio: 1 / 1;
+            width: 100%;
+            max-width: 90px;
+            margin: 0 auto;
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 3.2vh; 
+            font-size: 2.3vh; 
             font-weight: bold; 
-            color: #fff; 
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8); 
-            max-height: 75%;
-            width: auto;
-            margin: 0 auto;
             box-sizing: border-box;
-            border: 2px solid #444454;
+            border: 3px solid #444454;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: none;
+            transition: transform 0.1s ease;
+        }
+
+        .square:disabled, .cell-x:disabled {
+            cursor: default;
+        }
+
+        .edit-active .square:not(.gray), .edit-active .cell-x {
+            cursor: pointer;
+            border-color: #ff69b4 !important;
         }
         
-        .gray { background-color: #3d3d4e; border-color: #555568; }
-        .yellow { background-color: #fbc02d; color: #000; text-shadow: none; border-color: #fff350; }
-        .orange { background-color: #ef6c00; border-color: #ff9d3f; }
-        .red { background-color: #c62828; border-color: #ff5f5f; }
+        /* Фиксация цветов без системных градиентов мобильных ОС */
+        .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        .yellow { background-color: #fbc02d !important; color: #000000 !important; border-color: #fff350; text-shadow: none; }
+        .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
+        .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); }
         
         .cell-x { 
-            background-color: #141419; 
+            background-color: #141419 !important; 
             border: 2px dashed #c62828; 
             border-radius: 14px; 
-            height: 75%; 
+            padding: 15px 5px;
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 5vh; 
+            font-size: 3.5vh; 
             font-weight: bold; 
-            color: #ff5252; 
+            color: #ff5252 !important; 
             width: 100%;
             box-sizing: border-box;
+            -webkit-appearance: none;
+            appearance: none;
+            background-image: none;
+        }
+
+        /* Адаптивность: перестроение под вертикальный экран телефона */
+        @media (max-width: 600px) {
+            .user-card {
+                grid-template-columns: 1fr 1fr 1fr;
+                gap: 10px;
+            }
+            .name-btn {
+                grid-column: span 2;
+                font-size: 3.5vh;
+                padding: 10px;
+            }
+            .cell-x {
+                grid-column: span 1;
+                font-size: 3vh;
+                padding: 10px 5px;
+            }
+            .square {
+                grid-column: span 1;
+                font-size: 2vh;
+                max-width: 75px;
+            }
         }
     </style>
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>-= Ч У П Р А =-</h2>
+    <h2>Мониторинг Наказаний</h2>
     <div class="table" id="table-content"></div>
 </div>
 <script>
@@ -179,6 +199,7 @@ HTML_TEMPLATE = """
     const wsUrl = protocol + window.location.host + '/ws';
     let socket;
     let audioCtx = null;
+    let pressTimer = null;
 
     function initAudio() {
         if (!audioCtx) {
@@ -195,24 +216,17 @@ HTML_TEMPLATE = """
         try {
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
-            
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-            
             gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
             gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
-            
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            
             oscillator.start();
             oscillator.stop(audioCtx.currentTime + 0.2);
-        } catch (e) {
-            console.log("Audio error:", e);
-        }
+        } catch (e) { console.log(e); }
     }
 
-    // Возвращено отображение секунд
     function formatTime(seconds) {
         if (seconds <= 0) return "";
         const h = Math.floor(seconds / 3600);
@@ -235,9 +249,7 @@ HTML_TEMPLATE = """
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
             const response = JSON.parse(event.data);
-            if (response.play_sound) {
-                playBeep();
-            }
+            if (response.play_sound) playBeep();
             renderTable(response.data);
         };
         socket.onclose = function() { setTimeout(connect, 1500); };
@@ -247,31 +259,65 @@ HTML_TEMPLATE = """
         const container = document.getElementById('table-content');
         if (!container) return;
         
-        let html = `<div class="row header">
-            <div> </div>
-            <div>1</div>
-            <div>2</div>
-            <div>3</div>
-            <div>ШТРАФ</div>
-        </div>`;
-        
+        let html = "";
         for (const [name, info] of Object.entries(data)) {
-            html += `<div class="row row-user">
-                <button class="name-btn" onclick="clickName('${name}')">${name}</button>
-                <div><div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div></div>
-                <div><div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div></div>
-                <div><div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div></div>
-                <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
+            const editClass = info.edit_mode ? "edit-active" : "";
+            const isClickable = info.edit_mode ? "" : "disabled";
+
+            html += `
+            <div class="user-card ${editClass}">
+                <button class="name-btn" 
+                        onmousedown="startPress('${name}')" 
+                        onmouseup="endPress('${name}')" 
+                        onmouseleave="cancelPress()"
+                        ontouchstart="startPress('${name}')" 
+                        ontouchend="endPress('${name}')">
+                    ${name}${info.edit_mode ? " ⚙" : ""}
+                </button>
+                <button class="square ${info.squares[0]}" ${isClickable} onclick="clickElement('${name}', 0)">${formatTime(info.timers[0])}</button>
+                <button class="square ${info.squares[1]}" ${isClickable} onclick="clickElement('${name}', 1)">${formatTime(info.timers[1])}</button>
+                <button class="square ${info.squares[2]}" ${isClickable} onclick="clickElement('${name}', 2)">${formatTime(info.timers[2])}</button>
+                <button class="cell-x" ${isClickable} onclick="clickElement('${name}', 'x')">${formatPenalty(info.penalty_minutes)}</button>
             </div>`;
         }
         container.innerHTML = html;
     }
 
-    function clickName(name) {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ "action": "click", "name": name }));
+    // Логика удержания кнопки (Long Press 3 секунды)
+    function startPress(name) {
+        initAudio();
+        cancelPress();
+        pressTimer = setTimeout(() => {
+            sendAction({ "action": "long_press", "name": name });
+            pressTimer = null;
+        }, 3000); 
+    }
+
+    function endPress(name) {
+        if (pressTimer !== null) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+            sendAction({ "action": "click", "name": name });
         }
     }
+
+    function cancelPress() {
+        if (pressTimer !== null) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+    }
+
+    function clickElement(name, elementIdx) {
+        sendAction({ "action": "cancel_element", "name": name, "element": elementIdx });
+    }
+
+    function sendAction(payload) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify(payload));
+        }
+    }
+
     connect();
 </script>
 </body>
@@ -284,6 +330,10 @@ async def get():
 
 def handle_click(name: str):
     child = CHILDREN_DATA[name]
+    # Если включен режим редактирования, обычные клики по имени игнорируются
+    if child["edit_mode"]:
+        return
+        
     squares = child["squares"]
     if squares[0] == "gray":
         child["squares"][0] = "yellow"
@@ -296,6 +346,28 @@ def handle_click(name: str):
         child["timers"][2] = TIMER_DURATION
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
+
+def handle_cancel(name: str, element):
+    child = CHILDREN_DATA[name]
+    if not child["edit_mode"]:
+        return
+
+    # Отмена штрафного времени в ячейке Х
+    if element == 'x':
+        if child["penalty_minutes"] >= 20:
+            child["penalty_minutes"] -= 20
+    # Отмена конкретных квадратов предупреждений
+    else:
+        idx = int(element)
+        child["squares"][idx] = "gray"
+        child["timers"][idx] = 0
+
+# Таймер автоматического выхода из режима редактирования через 5 секунд
+async def auto_disable_edit_mode(name: str):
+    await asyncio.sleep(5)
+    if CHILDREN_DATA[name]["edit_mode"]:
+        CHILDREN_DATA[name]["edit_mode"] = False
+        await broadcast_state(play_sound=False)
 
 async def tick_processing():
     while True:
@@ -337,9 +409,25 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_json()
-            if data.get("action") == "click":
-                handle_click(data.get("name"))
+            action = data.get("action")
+            name = data.get("name")
+            
+            if action == "click":
+                handle_click(name)
                 await broadcast_state(play_sound=True)
+                
+            elif action == "long_press":
+                # Переключаем режим редактирования
+                CHILDREN_DATA[name]["edit_mode"] = not CHILDREN_DATA[name]["edit_mode"]
+                await broadcast_state(play_sound=True)
+                if CHILDREN_DATA[name]["edit_mode"]:
+                    asyncio.create_task(auto_disable_edit_mode(name))
+                    
+            elif action == "cancel_element":
+                element = data.get("element")
+                handle_cancel(name, element)
+                await broadcast_state(play_sound=True)
+                
     except WebSocketDisconnect:
         active_connections.remove(websocket)
 
