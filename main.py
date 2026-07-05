@@ -126,6 +126,7 @@ HTML_TEMPLATE = """
             width: 23%;
             height: 90px; 
             border-radius: 14px; 
+            position: relative;
             display: flex; 
             flex-direction: column;
             justify-content: center; 
@@ -136,20 +137,26 @@ HTML_TEMPLATE = """
             color: #ffffff;
             outline: none;
             -webkit-tap-highlight-color: transparent;
-            padding: 2px 0;
+            padding: 0;
         }
 
+        /* Маленькая цифра кубика в левом верхнем углу */
         .square span {
-            font-size: 52px; /* Максимальный размер цифры кубика */
-            font-weight: 900;
+            position: absolute;
+            top: 6px;
+            left: 8px;
+            font-size: 13px; 
+            font-weight: bold;
+            opacity: 0.8;
             line-height: 1;
         }
 
+        /* Огромный цифровой таймер */
         .square strong {
-            font-size: 12px; 
-            font-weight: bold;
-            margin-top: -2px;
+            font-size: 32px; 
+            font-weight: 900;
             display: block;
+            letter-spacing: -0.5px;
         }
         
         .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
@@ -166,11 +173,11 @@ HTML_TEMPLATE = """
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 42px; /* Огромный шрифт штрафа на всю ячейку */
+            font-size: 38px; /* Огромный чистый шрифт под новый формат */
             font-weight: 900; 
             color: #ff5252 !important; 
             box-sizing: border-box;
-            line-height: 90px;
+            letter-spacing: -1px;
         }
 
         /* Контейнер регулировки штрафа */
@@ -187,10 +194,10 @@ HTML_TEMPLATE = """
 
         .penalty-edit-btn {
             width: 100%;
-            height: 22px;
+            height: 20px;
             border: 2px solid #ff69b4;
             border-radius: 6px;
-            font-size: 18px; 
+            font-size: 16px; 
             font-weight: 900;
             cursor: pointer;
             display: flex;
@@ -204,16 +211,15 @@ HTML_TEMPLATE = """
         .btn-dec { background-color: #c62828; }
 
         .penalty-edit-value {
-            font-size: 42px; /* Огромный шрифт штрафа при редактировании */
+            font-size: 38px; 
             font-weight: 900; 
             color: #ff69b4;
             text-align: center;
-            height: 42px;
-            line-height: 42px;
             flex-grow: 1;
             display: flex;
             align-items: center;
             justify-content: center;
+            letter-spacing: -1px;
         }
 
         .bottom-bar {
@@ -375,13 +381,11 @@ HTML_TEMPLATE = """
                     <button id="sq_ERIC_1" class="square"><span>2</span><strong id="t_ERIC_1"></strong></button>
                     <button id="sq_ERIC_2" class="square"><span>3</span><strong id="t_ERIC_2"></strong></button>
                     
-                    <!-- Блок отображения штрафа в обычном режиме -->
-                    <div id="p_view_ERIC" class="cell-x">0m</div>
+                    <div id="p_view_ERIC" class="cell-x">-00:00</div>
                     
-                    <!-- Блок изменения штрафа (режим А) -->
                     <div id="p_edit_ERIC" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('ERIC', 'inc')">+</button>
-                        <div id="p_val_ERIC" class="penalty-edit-value">0m</div>
+                        <div id="p_val_ERIC" class="penalty-edit-value">-00:00</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('ERIC', 'dec')">-</button>
                     </div>
                 </div>
@@ -395,11 +399,11 @@ HTML_TEMPLATE = """
                     <button id="sq_NICK_1" class="square"><span>2</span><strong id="t_NICK_1"></strong></button>
                     <button id="sq_NICK_2" class="square"><span>3</span><strong id="t_NICK_2"></strong></button>
                     
-                    <div id="p_view_NICK" class="cell-x">0m</div>
+                    <div id="p_view_NICK" class="cell-x">-00:00</div>
                     
                     <div id="p_edit_NICK" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('NICK', 'inc')">+</button>
-                        <div id="p_val_NICK" class="penalty-edit-value">0m</div>
+                        <div id="p_val_NICK" class="penalty-edit-value">-00:00</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('NICK', 'dec')">-</button>
                     </div>
                 </div>
@@ -414,7 +418,6 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Модальные окна -->
 <div class="modal-overlay" id="logOverlay" onclick="closeModal('logOverlay', event)">
     <div class="log-window" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -488,19 +491,21 @@ HTML_TEMPLATE = """
         } catch (e) {}
     }
 
+    // Чистый цифровой формат без букв MM:SS
     function formatTime(seconds) {
         if (seconds <= 0) return "";
         var m = Math.floor(seconds / 60);
         var s = seconds % 60;
-        return m + "m" + s + "s";
+        return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
     }
 
+    // Чистый цифровой формат штрафа -ЧЧ:ММ
     function formatPenalty(minutes) {
-        if (minutes === 0) return "0m";
         var h = Math.floor(minutes / 60);
         var m = minutes % 60;
-        if (h > 0) return "-" + h + "h" + m + "m";
-        return "-" + m + "m";
+        var hStr = (h < 10 ? "0" : "") + h;
+        var mStr = (m < 10 ? "0" : "") + m;
+        return "-" + hStr + ":" + mStr;
     }
 
     function bindEvents(name) {
@@ -814,7 +819,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 password = data.get("password")
                 if password == ADMIN_PASSWORD:
                     ACTIVE_CONNECTIONS[websocket]["is_admin"] = True
-                    add_log("Устройство успешно вошло в режим Администратора.")
+                    add_log("Устройство успешно вошло в...</message>")
                     await broadcast_state(play_sound=True)
                 continue
                 
