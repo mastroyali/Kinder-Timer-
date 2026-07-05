@@ -30,7 +30,7 @@ HTML_TEMPLATE = """
     <title>Панель Контроля Времени</title>
     <style>
         body {
-            font-family: 'Segoe UI', -apple-system, sans-serif;
+            font-family: Arial, sans-serif;
             background-color: #141419;
             color: #ffffff;
             margin: 0;
@@ -43,7 +43,6 @@ HTML_TEMPLATE = """
         }
         h2 { text-align: center; color: #a0a0ab; margin-bottom: 30px; }
         
-        /* Стабильная верстка без CSS Grid для старых версий iOS */
         .table { 
             background-color: #1e1e24; 
             border-radius: 12px; 
@@ -125,38 +124,60 @@ HTML_TEMPLATE = """
             display: block;
             box-sizing: border-box;
         }
+        #debug-log {
+            margin-top: 20px;
+            padding: 10px;
+            background: #000;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 5px;
+            max-height: 150px;
+            overflow-y: auto;
+        }
     </style>
 </head>
 <body>
 <div class="container" onclick="initAudio()">
     <h2>Мониторинг Наказаний</h2>
-    <div class="table" id="table-content"></div>
+    <div class="table" id="table-content">Ожидание данных...</div>
+    <div id="debug-log">Лог отладки для iPad: Система запущена...</div>
 </div>
 
 <script>
-    // Используем строго синтаксис ES5 (без let, const, стрелочных функций)
-    var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    var wsUrl = protocol + window.location.host + '/ws';
-    var socket;
+    // Функция логирования прямо на экран старого iPad
+    function logDebug(msg) {
+        var logDiv = document.getElementById('debug-log');
+        if (logDiv) {
+            logDiv.innerHTML += '<br/>' + msg;
+        }
+    }
+
+    // Безопасное определение URL вебсокета
+    var wsUrl = "";
+    try {
+        var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+        wsUrl = protocol + window.location.host + '/ws';
+        logDebug("WS URL определен: " + wsUrl);
+    } catch(e) {
+        logDebug("Ошибка определения URL: " + e.message);
+    }
+
+    var socket = null;
     var audioCtx = null;
 
-    // Кроссбраузерная и бесконфликтная инициализация звука для iOS 9
     function initAudio() {
         if (!audioCtx) {
             try {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                // Старый трюк для разблокировки звука в iOS 9: играем пустую ноту
                 var buffer = audioCtx.createBuffer(1, 1, 22050);
                 var source = audioCtx.createBufferSource();
                 source.buffer = buffer;
                 source.connect(audioCtx.destination);
-                if (source.start) {
-                    source.start(0);
-                } else if (source.noteOn) {
-                    source.noteOn(0);
-                }
+                if (source.start) { source.start(0); } else if (source.noteOn) { source.noteOn(0); }
+                logDebug("Аудио инициализировано");
             } catch (e) {
-                console.log("Audio Init Error:", e);
+                logDebug("Ошибка аудио: " + e.message);
             }
         }
     }
@@ -167,31 +188,16 @@ HTML_TEMPLATE = """
         try {
             var oscillator = audioCtx.createOscillator();
             var gainNode = audioCtx.createGain();
-            
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-            
             gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-            
-            // Замена экспоненциального затухания на линейное для совместимости с iOS 9
             gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
-            
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
-            
-            if (oscillator.start) {
-                oscillator.start(0);
-            } else if (oscillator.noteOn) {
-                oscillator.noteOn(0);
-            }
-            
-            if (oscillator.stop) {
-                oscillator.stop(audioCtx.currentTime + 0.2);
-            } else if (oscillator.noteOff) {
-                oscillator.noteOff(audioCtx.currentTime + 0.2);
-            }
+            if (oscillator.start) { oscillator.start(0); } else if (oscillator.noteOn) { oscillator.noteOn(0); }
+            if (oscillator.stop) { oscillator.stop(audioCtx.currentTime + 0.2); } else if (oscillator.noteOff) { oscillator.noteOff(audioCtx.currentTime + 0.2); }
         } catch (e) {
-            console.log("Audio Play Error:", e);
+            logDebug("Ошибка воспроизведения: " + e.message);
         }
     }
 
@@ -214,53 +220,91 @@ HTML_TEMPLATE = """
     }
 
     function connect() {
-        socket = new WebSocket(wsUrl);
-        socket.onmessage = function(event) {
-            var response = JSON.parse(event.data);
-            if (response.play_sound) {
-                playBeep();
+        try {
+            logDebug("Попытка подключения к WebSocket...");
+            // Проверка поддержки WebSocket старым браузером
+            var WSObj = window.WebSocket || window.MozWebSocket;
+            if (!WSObj) {
+                logDebug("Критическая ошибка: Браузер не поддерживает WebSocket!");
+                return;
             }
-            renderTable(response.data);
-        };
-        socket.onclose = function() { 
-            setTimeout(connect, 1500); 
-        };
+            
+            socket = new WSObj(wsUrl);
+            
+            socket.onopen = function() {
+                logDebug("WebSocket соединение успешно установлено!");
+            };
+
+            socket.onmessage = function(event) {
+                try {
+                    var response = JSON.parse(event.data);
+                    if (response.play_sound) {
+                        playBeep();
+                    }
+                    renderTable(response.data);
+                } catch(err) {
+                    logDebug("Ошибка обработки сообщения: " + err.message);
+                }
+            };
+
+            socket.onclose = function() { 
+                logDebug("Соединение закрыто. Реконнект через 2 сек...");
+                setTimeout(connect, 2000); 
+            };
+
+            socket.onerror = function(err) {
+                logDebug("Ошибка WebSocket-соединения.");
+            };
+
+        } catch(e) {
+            logDebug("Ошибка в блоке connect: " + e.message);
+        }
     }
 
     function renderTable(data) {
         var container = document.getElementById('table-content');
         if (!container) return;
         
-        var html = '<div class="row header">' +
-                   '<div class="cell cell-name">Имя</div>' +
-                   '<div class="cell cell-square">1</div>' +
-                   '<div class="cell cell-square">2</div>' +
-                   '<div class="cell cell-square">3</div>' +
-                   '<div class="cell cell-penalty">Ячейка Х</div>' +
-                   '</div>';
-                   
-        // Классический перебор свойств объекта, работающий везде
-        for (var name in data) {
-            if (data.hasOwnProperty(name)) {
-                var info = data[name];
-                html += '<div class="row row-border">' +
-                    '<div class="cell cell-name"><button class="name-btn" onclick="clickName(\'' + name + '\')">' + name + '</button></div>' +
-                    '<div class="cell cell-square"><div class="square ' + info.squares[0] + '">' + formatTime(info.timers[0]) + '</div></div>' +
-                    '<div class="cell cell-square"><div class="square ' + info.squares[1] + '">' + formatTime(info.timers[1]) + '</div></div>' +
-                    '<div class="cell cell-square"><div class="square ' + info.squares[2] + '">' + formatTime(info.timers[2]) + '</div></div>' +
-                    '<div class="cell cell-penalty"><div class="cell-x">' + formatPenalty(info.penalty_minutes) + '</div></div>' +
-                '</div>';
+        try {
+            var html = '<div class="row header">' +
+                       '<div class="cell cell-name">Имя</div>' +
+                       '<div class="cell cell-square">1</div>' +
+                       '<div class="cell cell-square">2</div>' +
+                       '<div class="cell cell-square">3</div>' +
+                       '<div class="cell cell-penalty">Ячейка Х</div>' +
+                       '</div>';
+                       
+            for (var name in data) {
+                if (data.hasOwnProperty(name)) {
+                    var info = data[name];
+                    html += '<div class="row row-border">' +
+                        '<div class="cell cell-name"><button class="name-btn" onclick="clickName(\'' + name + '\')">' + name + '</button></div>' +
+                        '<div class="cell cell-square"><div class="square ' + info.squares[0] + '">' + formatTime(info.timers[0]) + '</div></div>' +
+                        '<div class="cell cell-square"><div class="square ' + info.squares[1] + '">' + formatTime(info.timers[1]) + '</div></div>' +
+                        '<div class="cell cell-square"><div class="square ' + info.squares[2] + '">' + formatTime(info.timers[2]) + '</div></div>' +
+                        '<div class="cell cell-penalty"><div class="cell-x">' + formatPenalty(info.penalty_minutes) + '</div></div>' +
+                    '</div>';
+                }
             }
+            container.innerHTML = html;
+        } catch(e) {
+            logDebug("Ошибка рендеринга таблицы: " + e.message);
         }
-        container.innerHTML = html;
     }
 
     function clickName(name) {
-        if (socket && socket.readyState === WebSocket.OPEN) {
-            socket.send(JSON.stringify({ "action": "click", "name": name }));
+        if (socket && socket.readyState === 1) { // 1 означает OPEN в старых спецификациях
+            try {
+                socket.send(JSON.stringify({ "action": "click", "name": name }));
+            } catch(e) {
+                logDebug("Ошибка отправки клика: " + e.message);
+            }
+        } else {
+            logDebug("Клик не отправлен: сокет не готов.");
         }
     }
     
+    // Запуск процесса соединения
     connect();
 </script>
 </body>
