@@ -19,7 +19,7 @@ CHILDREN_DATA = {
 }
 
 active_connections: list[WebSocket] = []
-TIMER_DURATION = 20 * 60 
+TIMER_DURATION = 1 * 60 
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -158,7 +158,7 @@ def handle_click(name: str):
         child["squares"][2] = "red"
         child["timers"][2] = TIMER_DURATION
     elif squares[2] == "red":
-        child["penalty_minutes"] += 1
+        child["penalty_minutes"] += 20
 
 async def tick_processing():
     while True:
