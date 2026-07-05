@@ -7,11 +7,11 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "3003"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
-    "ERIK": {
+    "ERIС": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0,
@@ -157,20 +157,27 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
 
+        /* Обновленный контейнер: теперь он объединяет кнопки и вывод цифры внутри рамки */
         .penalty-edit-container {
             width: 23%;
             height: 75px;
+            background-color: #141419 !important; 
+            border: 3px solid #ff69b4; 
+            border-radius: 14px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
+            align-items: center;
             box-sizing: border-box;
+            padding: 2px;
         }
 
         .penalty-edit-btn {
-            height: 35px;
-            border: 2px solid #ff69b4;
-            border-radius: 8px;
-            font-size: 18px;
+            width: 100%;
+            height: 22px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
@@ -182,6 +189,13 @@ HTML_TEMPLATE = """
         }
         .btn-inc { background-color: #2e7d32; }
         .btn-dec { background-color: #c62828; }
+
+        .penalty-edit-value {
+            font-size: 14px;
+            font-weight: bold;
+            color: #ff69b4;
+            line-height: 19px;
+        }
 
         .bottom-bar {
             flex: 0 0 auto;
@@ -329,7 +343,7 @@ HTML_TEMPLATE = """
 <body>
 <div class="container">
     <div class="main-content">
-        <h2>Мониторинг Наказаний</h2>
+        <h2>ЧУПРА</h2>
         <div class="cards-wrapper">
             
             <!-- КАРТОЧКА ERIK -->
@@ -340,11 +354,13 @@ HTML_TEMPLATE = """
                     <button id="sq_ERIK_1" class="square"><span>2</span><strong id="t_ERIK_1"></strong></button>
                     <button id="sq_ERIK_2" class="square"><span>3</span><strong id="t_ERIK_2"></strong></button>
                     
-                    <!-- Блок отображения штрафа -->
+                    <!-- Блок отображения штрафа в обычном режиме -->
                     <div id="p_view_ERIK" class="cell-x">0m</div>
-                    <!-- Блок изменения штрафа (режим А) -->
+                    
+                    <!-- Блок изменения штрафа (в режиме А цифра зажата между кнопками) -->
                     <div id="p_edit_ERIK" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('ERIK', 'inc')">+</button>
+                        <div id="p_edit_val_ERIK" class="penalty-edit-value">0m</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('ERIK', 'dec')">-</button>
                     </div>
                 </div>
@@ -359,8 +375,10 @@ HTML_TEMPLATE = """
                     <button id="sq_NICK_2" class="square"><span>3</span><strong id="t_NICK_2"></strong></button>
                     
                     <div id="p_view_NICK" class="cell-x">0m</div>
+                    
                     <div id="p_edit_NICK" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('NICK', 'inc')">+</button>
+                        <div id="p_edit_val_NICK" class="penalty-edit-value">0m</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('NICK', 'dec')">-</button>
                     </div>
                 </div>
@@ -450,7 +468,6 @@ HTML_TEMPLATE = """
         return "-" + m + "m";
     }
 
-    // Привязываем старые события мыши и тача к именам детей напрямую
     function bindEvents(name) {
         var btn = document.getElementById("name_" + name);
         if (!btn) return;
@@ -466,7 +483,7 @@ HTML_TEMPLATE = """
                 sendAction({ "action": "long_press", "name": name });
                 isLongPressTriggered = true;
                 pressTimer = null;
-            }, 3000); // 3 секунды удержания
+            }, 3000); 
         };
 
         var endHandler = function(e) {
@@ -492,17 +509,14 @@ HTML_TEMPLATE = """
             }
         };
 
-        // Старый стандарт TouchEvents
         btn.ontouchstart = startHandler;
         btn.ontouchend = endHandler;
         btn.ontouchcancel = cancelHandler;
 
-        // MouseEvents для ПК и старых систем без поддержки тача
         btn.onmousedown = startHandler;
         btn.onmouseup = endHandler;
         btn.onmouseout = cancelHandler;
 
-        // Вешаем обычные клики на квадраты
         for (var i = 0; i < 3; i++) {
             (function(idx) {
                 var sq = document.getElementById("sq_" + name + "_" + idx);
@@ -546,14 +560,12 @@ HTML_TEMPLATE = """
         socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
-    // Прямое обновление элементов вместо полного innerHTML перерендеринга
     function updateChildUI(name, info) {
         if (!info) return;
 
         var card = document.getElementById("card_" + name);
         var nameBtn = document.getElementById("name_" + name);
         
-        // Обновление заголовка режима редактирования
         if (info.edit_mode) {
             card.classList.add("edit-active");
             nameBtn.innerHTML = name + " ⚙";
@@ -562,25 +574,25 @@ HTML_TEMPLATE = """
             nameBtn.innerHTML = name;
         }
 
-        // Квадраты
         for (var i = 0; i < 3; i++) {
             var sq = document.getElementById("sq_" + name + "_" + i);
             var tNode = document.getElementById("t_" + name + "_" + i);
-            
-            // Сброс старых классов цвета
             sq.className = "square " + info.squares[i];
             tNode.innerHTML = formatTime(info.timers[i]);
         }
 
-        // Штрафы
         var pView = document.getElementById("p_view_" + name);
         var pEdit = document.getElementById("p_edit_" + name);
+        var pEditVal = document.getElementById("p_edit_val_" + name);
+
+        var formattedPenaltyText = formatPenalty(info.penalty_minutes);
 
         if (info.edit_mode && clientIsAdmin) {
             pView.style.display = "none";
+            pEditVal.innerHTML = formattedPenaltyText; // Выводим актуальное время в поле редактирования
             pEdit.style.display = "flex";
         } else {
-            pView.innerHTML = formatPenalty(info.penalty_minutes);
+            pView.innerHTML = formattedPenaltyText;
             pView.style.display = "flex";
             pEdit.style.display = "none";
         }
@@ -633,10 +645,8 @@ HTML_TEMPLATE = """
         }
     }
 
-    // Инициализируем привязку событий жестко к элементам
     bindEvents("ERIK");
     bindEvents("NICK");
-    
     connect();
 </script>
 </body>
@@ -695,11 +705,12 @@ def handle_modify_penalty(name: str, operation: str):
             child["penalty_minutes"] -= 20
             add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
+# Таймаут изменен с 5 на 15 секунд
 async def auto_disable_edit_mode(name: str):
-    await asyncio.sleep(5)
+    await asyncio.sleep(15)
     if CHILDREN_DATA[name]["edit_mode"]:
         CHILDREN_DATA[name]["edit_mode"] = False
-        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту.")
+        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту (15с).")
         await broadcast_state(play_sound=False)
 
 async def tick_processing():
