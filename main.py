@@ -139,7 +139,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>Мониторинг Наказаний</h2>
+    <h2>Ч У П Р А</h2>
     <div class="table" id="table-content">Ожидание данных...</div>
     <div id="debug-log">Лог отладки для iPad: Система запущена...</div>
 </div>
