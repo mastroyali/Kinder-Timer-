@@ -1,8 +1,7 @@
 import os
-import json
 import asyncio
-from fastapi import FastAPI
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
@@ -19,315 +18,293 @@ CHILDREN_DATA = {
     }
 }
 
-SYSTEM_FLAGS = {
-    "play_sound": False
-}
-
+active_connections: list[WebSocket] = []
 TIMER_DURATION = 20 * 60 
 
-def format_time(seconds):
-    if seconds <= 0:
-        return ""
-    h = seconds // 3600
-    m = (seconds % 3600) // 60
-    s = seconds % 60
-    if h > 0:
-        return f"{h}h"
-    if m > 0:
-        return f"{m}m"
-    return f"{s}s"
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Панель Контроля Времени</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #141419;
+            color: #ffffff;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        /* Растягиваем контейнер строго на весь экран без скролла */
+        .container { 
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100vw;
+            box-sizing: border-box;
+            padding: 1.5vh 1.5vw;
+        }
+        
+        /* Крупный заголовок */
+        h2 { 
+            text-align: center; 
+            color: #a0a0ab; 
+            margin: 0 0 1.5vh 0; 
+            font-size: 4vh;
+            height: 5vh;
+            line-height: 5vh;
+        }
+        
+        /* Таблица на всю оставшуюся высоту */
+        .table { 
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            background-color: #1e1e24; 
+            border-radius: 16px; 
+            padding: 2vh; 
+            box-shadow: 0 12px 36px rgba(0,0,0,0.5); 
+            box-sizing: border-box;
+        }
+        
+        /* Строки таблицы делят место поровну */
+        .row { 
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            width: 100%;
+            gap: 1.5vw;
+        }
+        
+        .header { 
+            height: 6vh;
+            font-weight: bold; 
+            color: #8b8b98; 
+            border-bottom: 3px solid #3d3d4e; 
+            font-size: 3vh;
+        }
+        
+        .row-user {
+            flex-grow: 1;
+            border-bottom: 1px solid #2d2d38;
+        }
+        
+        .row-user:last-child { 
+            border-bottom: none; 
+        }
+        
+        /* Колонки с фиксированными долями ширины */
+        .cell-name { width: 28%; }
+        .cell-square { width: 15%; text-align: center; }
+        .cell-penalty { width: 27%; }
+        
+        .header .cell-square {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        /* Громадная кнопка с именем */
+        .name-btn { 
+            background-color: #2b2b36; 
+            color: #fff; 
+            border: 2px solid #444454; 
+            padding: 0;
+            border-radius: 14px; 
+            font-size: 5vh; 
+            font-weight: bold; 
+            cursor: pointer; 
+            text-align: center; 
+            width: 100%;
+            height: 80%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-sizing: border-box;
+            -webkit-appearance: none;
+        }
+        
+        .name-btn:active {
+            background-color: #3d3d4e;
+        }
+        
+        /* Огромные квадратные таймеры */
+        .square { 
+            width: 100%;
+            height: 80%;
+            border-radius: 14px; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 4vh; 
+            font-weight: bold; 
+            color: #fff; 
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8); 
+            box-sizing: border-box;
+        }
+        
+        .gray { background-color: #3d3d4e; }
+        .yellow { background-color: #fbc02d; color: #000; text-shadow: none; }
+        .orange { background-color: #ef6c00; }
+        .red { background-color: #c62828; }
+        
+        /* Внушительная штрафная зона Х */
+        .cell-x { 
+            background-color: #141419; 
+            border: 2px dashed #c62828; 
+            border-radius: 14px; 
+            width: 100%;
+            height: 80%;
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 5vh; 
+            font-weight: bold; 
+            color: #ff5252; 
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+<div class="container" onclick="initAudio()">
+    <h2>Мониторинг Наказаний</h2>
+    <div class="table" id="table-content"></div>
+</div>
+<script>
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = protocol + window.location.host + '/ws';
+    let socket;
+    let audioCtx = null;
 
-def format_penalty(minutes):
-    if minutes == 0:
-        return "0m"
-    h = minutes // 60
-    m = minutes % 60
-    if h > 0:
-        return f"-{h}h{m}m"
-    return f"-{m}m"
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
+    function playBeep() {
+        initAudio();
+        if (!audioCtx) return;
+        try {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.type = 'sine';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
+            
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+        } catch (e) {
+            console.log("Audio error:", e);
+        }
+    }
+
+    function formatTime(seconds) {
+        if (seconds <= 0) return "";
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = seconds % 60;
+        if (h > 0) return `${h}h`;
+        if (m > 0) return `${m}m`; // Оставляем только минуты, чтобы текст не мельчил из-за секунд
+        return `${s}s`;
+    }
+
+    function formatPenalty(minutes) {
+        if (minutes === 0) return "0m";
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        if (h > 0) return `-${h}h${m}m`;
+        return `-${m}m`;
+    }
+
+    function connect() {
+        socket = new WebSocket(wsUrl);
+        socket.onmessage = function(event) {
+            const response = JSON.parse(event.data);
+            if (response.play_sound) {
+                playBeep();
+            }
+            renderTable(response.data);
+        };
+        socket.onclose = function() { setTimeout(connect, 1500); };
+    }
+
+    function renderTable(data) {
+        const container = document.getElementById('table-content');
+        if (!container) return;
+        
+        let html = `<div class="row header">
+            <div class="cell-name">Имя</div>
+            <div class="cell-square">1</div>
+            <div class="cell-square">2</div>
+            <div class="cell-square">3</div>
+            <div class="cell-penalty" style="text-align:center">Ячейка Х</div>
+        </div>`;
+        
+        for (const [name, info] of Object.entries(data)) {
+            html += `<div class="row row-user">
+                <div class="cell-name">
+                    <button class="name-btn" onclick="clickName('${name}')">${name}</button>
+                </div>
+                <div class="cell-square">
+                    <div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div>
+                </div>
+                <div class="cell-square">
+                    <div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div>
+                </div>
+                <div class="cell-square">
+                    <div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div>
+                </div>
+                <div class="cell-penalty">
+                    <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
+                </div>
+            </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    function clickName(name) {
+        if (socket && socket.readyState === WebSocket.OPEN) {
+            socket.send(JSON.stringify({ "action": "click", "name": name }));
+        }
+    }
+    connect();
+</script>
+</body>
+</html>
+"""
 
 @app.get("/")
-async def get_dashboard():
-    # Главная страница: крупный интерфейс без мерцания
-    html_content = """
-    <!DOCTYPE html>
-    <html lang="ru">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <title>Ч У П Р А</title>
-        <style>
-            html, body {
-                height: 100%;
-                margin: 0;
-                padding: 0;
-                background-color: #141419;
-                color: #ffffff;
-                font-family: Arial, sans-serif;
-                overflow: hidden;
-            }
-            .container {
-                display: flex;
-                flex-direction: column;
-                height: 100vh;
-                width: 100vw;
-                box-sizing: border-box;
-                padding: 2vh 2vw;
-            }
-            h2 {
-                text-align: center;
-                color: #a0a0ab;
-                margin: 0 0 2vh 0;
-                font-size: 4vh;
-                height: 5vh;
-            }
-            .table {
-                display: flex;
-                flex-direction: column;
-                flex-grow: 1;
-                background-color: #1e1e24;
-                border-radius: 16px;
-                padding: 2vh;
-                box-shadow: 0 12px 36px rgba(0,0,0,0.5);
-                box-sizing: border-box;
-            }
-            .row {
-                display: flex;
-                flex-direction: row;
-                align-items: center;
-                width: 100%;
-            }
-            .header {
-                height: 6vh;
-                border-bottom: 3px solid #3d3d4e;
-                font-weight: bold;
-                color: #8b8b98;
-                font-size: 3vh;
-            }
-            .row-user {
-                flex-grow: 1;
-                border-bottom: 1px solid #2d2d38;
-            }
-            .row-user:last-child {
-                border-bottom: none;
-            }
-            .cell {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                padding: 0 1vw;
-                box-sizing: border-box;
-                height: 100%;
-            }
-            .cell-name { width: 30%; justify-content: flex-start; }
-            .cell-square { width: 15%; }
-            .cell-penalty { width: 25%; }
+async def get():
+    return HTMLResponse(HTML_TEMPLATE)
 
-            .name-btn {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background-color: #2b2b36;
-                color: #fff;
-                border: 2px solid #444454;
-                border-radius: 12px;
-                font-size: 4.5vh;
-                font-weight: bold;
-                text-decoration: none;
-                width: 100%;
-                height: 85%;
-                box-sizing: border-box;
-                -webkit-appearance: none;
-            }
-            .name-btn:active {
-                background-color: #3d3d4e;
-            }
-            .square {
-                border-radius: 12px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 100%;
-                height: 85%;
-                font-size: 3.5vh;
-                font-weight: bold;
-                color: #fff;
-                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
-                box-sizing: border-box;
-            }
-            .gray { background-color: #3d3d4e; }
-            .yellow { background-color: #fbc02d; color: #000; text-shadow: none; }
-            .orange { background-color: #ef6c00; }
-            .red { background-color: #c62828; }
-
-            .cell-x {
-                background-color: #141419;
-                border: 2px dashed #c62828;
-                border-radius: 12px;
-                width: 100%;
-                height: 85%;
-                font-size: 4.5vh;
-                font-weight: bold;
-                color: #ff5252;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                box-sizing: border-box;
-            }
-            #hidden-loader {
-                display: none;
-            }
-        </style>
-    </head>
-    <body onclick="initAudio()">
-    <div class="container">
-        <h2>Мониторинг Наказаний</h2>
-        <div class="table">
-            <div class="header row">
-                <div class="cell cell-name">Имя</div>
-                <div class="cell cell-square">1</div>
-                <div class="cell cell-square">2</div>
-                <div class="cell cell-square">3</div>
-                <div class="cell cell-penalty">Ячейка Х</div>
-            </div>
-            
-            <!-- Строка Эрика -->
-            <div class="row row-user" id="row-ERIK">
-                <div class="cell cell-name"><a class="name-btn" href="/click/ERIK" target="hidden-loader">ERIK</a></div>
-                <div class="cell cell-square"><div id="ERIK-sq0" class="square gray"></div></div>
-                <div class="cell cell-square"><div id="ERIK-sq1" class="square gray"></div></div>
-                <div class="cell cell-square"><div id="ERIK-sq2" class="square gray"></div></div>
-                <div class="cell cell-penalty"><div id="ERIK-txtX" class="cell-x">0m</div></div>
-            </div>
-
-            <!-- Строка Ника -->
-            <div class="row row-user" id="row-NICK">
-                <div class="cell cell-name"><a class="name-btn" href="/click/NICK" target="hidden-loader">NICK</a></div>
-                <div class="cell cell-square"><div id="NICK-sq0" class="square gray"></div></div>
-                <div class="cell cell-square"><div id="NICK-sq1" class="square gray"></div></div>
-                <div class="cell cell-square"><div id="NICK-sq2" class="square gray"></div></div>
-                <div class="cell cell-penalty"><div id="NICK-txtX" class="cell-x">0m</div></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Абсолютно скрытый фрейм, который раз в секунду запрашивает данные в фоне без мерцания экрана -->
-    <iframe id="hidden-loader" name="hidden-loader" src="/iframe-data"></iframe>
-
-    <script>
-        var audioCtx = null;
-        function initAudio() {
-            if (!audioCtx) {
-                try {
-                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                    var buffer = audioCtx.createBuffer(1, 1, 22050);
-                    var source = audioCtx.createBufferSource();
-                    source.buffer = buffer;
-                    source.connect(audioCtx.destination);
-                    if (source.start) { source.start(0); } else if (source.noteOn) { source.noteOn(0); }
-                } catch (e) { console.log("Audio Init Error"); }
-            }
-        }
-
-        function playBeep() {
-            initAudio();
-            if (!audioCtx) return;
-            try {
-                var oscillator = audioCtx.createOscillator();
-                var gainNode = audioCtx.createGain();
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-                gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                if (oscillator.start) { oscillator.start(0); } else if (oscillator.noteOn) { oscillator.noteOn(0); }
-                if (oscillator.stop) { oscillator.stop(audioCtx.currentTime + 0.2); } else if (oscillator.noteOff) { oscillator.noteOff(audioCtx.currentTime + 0.2); }
-            } catch (e) { console.log("Sound Error"); }
-        }
-
-        // Функция обновления DOM, вызываемая из скрытого фрейма
-        window.updateDOM = function(id, className, innerHTML) {
-            var el = document.getElementById(id);
-            if (el) {
-                if (el.className !== className) el.className = className;
-                if (el.innerHTML !== innerHTML) el.innerHTML = innerHTML;
-            }
-        };
-
-        window.triggerSound = function() {
-            playBeep();
-        };
-
-        // Заставляем iframe обновляться раз в секунду в фоновом режиме
-        setInterval(function() {
-            var iframe = document.getElementById('hidden-loader');
-            if (iframe) {
-                iframe.src = "/iframe-data?ts=" + new Date().getTime();
-            }
-        }, 1000);
-    </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
-
-@app.get("/iframe-data")
-async def get_iframe_data(ts: str = None):
-    # Эта страница грузится внутри скрытого фрейма и передает команды наверх в основное окно
-    sound_trigger = ""
-    if SYSTEM_FLAGS["play_sound"]:
-        SYSTEM_FLAGS["play_sound"] = False
-        sound_trigger = "window.parent.triggerSound();"
-
-    js_commands = ""
-    for name, info in CHILDREN_DATA.items():
-        t0 = format_time(info["timers"][0])
-        t1 = format_time(info["timers"][1])
-        t2 = format_time(info["timers"][2])
-        penalty = format_penalty(info["penalty_minutes"])
-        
-        js_commands += f"window.parent.updateDOM('{name}-sq0', 'square {info['squares'][0]}', '{t0}');"
-        js_commands += f"window.parent.updateDOM('{name}-sq1', 'square {info['squares'][1]}', '{t1}');"
-        js_commands += f"window.parent.updateDOM('{name}-sq2', 'square {info['squares'][2]}', '{t2}');"
-        js_commands += f"window.parent.updateDOM('{name}-txtX', 'cell-x', '{penalty}');"
-
-    html_content = f"""
-    <html>
-    <head><meta http-equiv="refresh" content="1"></head>
-    <body>
-    <script>
-        try {{
-            {sound_trigger}
-            {js_commands}
-        }} catch(e) {{}}
-    </script>
-    </body>
-    </html>
-    """
-    return HTMLResponse(content=html_content)
-
-@app.get("/click/{name}")
-async def process_click(name: str):
-    if name in CHILDREN_DATA:
-        child = CHILDREN_DATA[name]
-        squares = child["squares"]
-        if squares[0] == "gray":
-            child["squares"][0] = "yellow"
-            child["timers"][0] = TIMER_DURATION
-        elif squares[0] == "yellow" and squares[1] == "gray":
-            child["squares"][1] = "orange"
-            child["timers"][1] = TIMER_DURATION
-        elif squares[1] == "orange" and squares[2] == "gray":
-            child["squares"][2] = "red"
-            child["timers"][2] = TIMER_DURATION
-        elif squares[2] == "red":
-            child["penalty_minutes"] += 20
-            
-        SYSTEM_FLAGS["play_sound"] = True
-            
-    # Перенаправляем скрытый фрейм на пустую страницу обновления данных
-    return RedirectResponse(url="/iframe-data", status_code=303)
+def handle_click(name: str):
+    child = CHILDREN_DATA[name]
+    squares = child["squares"]
+    if squares[0] == "gray":
+        child["squares"][0] = "yellow"
+        child["timers"][0] = TIMER_DURATION
+    elif squares[0] == "yellow" and squares[1] == "gray":
+        child["squares"][1] = "orange"
+        child["timers"][1] = TIMER_DURATION
+    elif squares[1] == "orange" and squares[2] == "gray":
+        child["squares"][2] = "red"
+        child["timers"][2] = TIMER_DURATION
+    elif squares[2] == "red":
+        child["penalty_minutes"] += 20
 
 async def tick_processing():
     while True:
@@ -345,10 +322,35 @@ async def tick_processing():
                 child["timers"][0] -= 1
                 if child["timers"][0] == 0:
                     child["squares"][0] = "gray"
+                        
+        await broadcast_state(play_sound=False)
+
+async def broadcast_state(play_sound: bool = False):
+    if active_connections:
+        payload = {
+            "data": CHILDREN_DATA,
+            "play_sound": play_sound
+        }
+        tasks = [connection.send_json(payload) for connection in active_connections]
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(tick_processing())
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await websocket.accept()
+    active_connections.append(websocket)
+    await websocket.send_json({"data": CHILDREN_DATA, "play_sound": False})
+    try:
+        while True:
+            data = await websocket.receive_json()
+            if data.get("action") == "click":
+                handle_click(data.get("name"))
+                await broadcast_state(play_sound=True)
+    except WebSocketDisconnect:
+        active_connections.remove(websocket)
 
 if __name__ == "__main__":
     import uvicorn
