@@ -74,7 +74,7 @@ HTML_TEMPLATE = """
             display: grid; 
             grid-template-columns: 2.2fr 1fr 1fr 1fr 1.3fr; 
             align-items: center; 
-            gap: 1.5vw; 
+            gap: 2vw; 
             width: 100%;
         }
         
@@ -87,8 +87,15 @@ HTML_TEMPLATE = """
             text-align: center;
         }
         
+        .header div {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+        }
+        
         .header div:first-child {
-            text-align: left;
+            justify-content: flex-start;
             padding-left: 1vw;
         }
         
@@ -113,7 +120,7 @@ HTML_TEMPLATE = """
             font-size: 5.5vh; 
             font-weight: bold; 
             cursor: pointer; 
-            height: 85%;
+            height: 75%;
             width: 100%;
             box-sizing: border-box;
             -webkit-appearance: none;
@@ -123,30 +130,34 @@ HTML_TEMPLATE = """
             background-color: #3d3d4e;
         }
         
+        /* Четкая геометрия квадратов с рамками */
         .square { 
+            aspect-ratio: 1 / 1;
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 4vh; 
+            font-size: 3.2vh; 
             font-weight: bold; 
             color: #fff; 
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8); 
-            height: 85%;
-            width: 100%;
+            max-height: 75%;
+            width: auto;
+            margin: 0 auto;
             box-sizing: border-box;
+            border: 2px solid #444454;
         }
         
-        .gray { background-color: #3d3d4e; }
-        .yellow { background-color: #fbc02d; color: #000; text-shadow: none; }
-        .orange { background-color: #ef6c00; }
-        .red { background-color: #c62828; }
+        .gray { background-color: #3d3d4e; border-color: #555568; }
+        .yellow { background-color: #fbc02d; color: #000; text-shadow: none; border-color: #fff350; }
+        .orange { background-color: #ef6c00; border-color: #ff9d3f; }
+        .red { background-color: #c62828; border-color: #ff5f5f; }
         
         .cell-x { 
             background-color: #141419; 
             border: 2px dashed #c62828; 
             border-radius: 14px; 
-            height: 85%; 
+            height: 75%; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
@@ -201,13 +212,14 @@ HTML_TEMPLATE = """
         }
     }
 
+    // Возвращено отображение секунд
     function formatTime(seconds) {
         if (seconds <= 0) return "";
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
-        if (h > 0) return `${h}h`;
-        if (m > 0) return `${m}m`;
+        if (h > 0) return `${h}h${m}m`;
+        if (m > 0) return `${m}m${s}s`;
         return `${s}s`;
     }
 
@@ -246,9 +258,9 @@ HTML_TEMPLATE = """
         for (const [name, info] of Object.entries(data)) {
             html += `<div class="row row-user">
                 <button class="name-btn" onclick="clickName('${name}')">${name}</button>
-                <div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div>
-                <div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div>
-                <div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div>
+                <div><div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div></div>
+                <div><div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div></div>
+                <div><div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div></div>
                 <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
             </div>`;
         }
