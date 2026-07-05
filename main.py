@@ -18,36 +18,8 @@ CHILDREN_DATA = {
     }
 }
 
-active_connections = []
+active_connections: list[WebSocket] = []
 TIMER_DURATION = 20 * 60 
-
-async def broadcast_state():
-    if not active_connections:
-        return
-    for connection in list(active_connections):
-        try:
-            await connection.send_json(CHILDREN_DATA)
-        except Exception:
-            if connection in active_connections:
-                active_connections.remove(connection)
-
-async def tick_processing():
-    while True:
-        await asyncio.sleep(1)
-        need_broadcast = False
-        for name, child in CHILDREN_DATA.items():
-            for i in range(3):
-                if child["timers"][i] > 0:
-                    child["timers"][i] -= 1
-                    need_broadcast = True
-                    if child["timers"][i] == 0:
-                        child["squares"][i] = "gray"
-        if need_broadcast:
-            await broadcast_state()
-
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(tick_processing())
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -57,7 +29,15 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Панель Контроля Времени</title>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #141419; color: #ffffff; margin: 0; padding: 20px; display: flex; justify-content: center; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background-color: #141419;
+            color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
         .container { width: 100%; max-width: 600px; }
         h2 { text-align: center; color: #a0a0ab; margin-bottom: 30px; }
         .table { background-color: #1e1e24; border-radius: 12px; padding: 15px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
@@ -65,63 +45,61 @@ HTML_TEMPLATE = """
         .row:last-child { border-bottom: none; }
         .header { font-weight: bold; color: #8b8b98; border-bottom: 2px solid #3d3d4e; padding-bottom: 10px; }
         .name-btn { background-color: #2b2b36; color: #fff; border: 1px solid #444454; padding: 12px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; text-align: left; }
-        .square { aspect-ratio: 1; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); min-height: 40px;}
+        .square { aspect-ratio: 1; border-radius: 6px; display: flex; justify-content: center; align-items: center; font-size: 11px; font-weight: bold; color: #fff; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); }
         .gray { background-color: #3d3d4e; }
         .green { background-color: #2e7d32; }
         .orange { background-color: #ef6c00; }
         .red { background-color: #c62828; }
-        .cell-x { background-color: #141419; border: 1px dashed #c62828; border-radius: 8px; height: 100%; display: flex; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; color: #ff5252; min-height: 40px; }
+        .cell-x { background-color: #141419; border: 1px dashed #c62828; border-radius: 8px; height: 100%; display: flex; justify-content: center; align-items: center; font-size: 16px; font-weight: bold; color: #ff5252; min-height: 45px; }
     </style>
 </head>
 <body>
 <div class="container">
     <h2>Мониторинг Наказаний</h2>
-    <div class="table" id="table-content">Загрузка данных...</div>
+    <div class="table" id="table-content"></div>
 </div>
 <script>
-    let socket;
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsUrl = protocol + window.location.host + '/ws';
+    let socket;
 
     function formatTime(seconds) {
         if (seconds <= 0) return "";
         const h = Math.floor(seconds / 3600);
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
-        if (h > 0) return h + "h" + m + "m";
-        if (m > 0) return m + "m" + s + "s";
-        return s + "s";
+        if (h > 0) return `${h}h${m}m`;
+        if (m > 0) return `${m}m${s}s`;
+        return `${s}s`;
     }
 
     function formatPenalty(minutes) {
         if (minutes === 0) return "0m";
         const h = Math.floor(minutes / 60);
         const m = minutes % 60;
-        if (h > 0) return "-" + h + "h" + m + "m";
-        return "-" + m + "m";
+        if (h > 0) return `-${h}h${m}m`;
+        return `-${m}m`;
     }
 
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            try { renderTable(JSON.parse(event.data)); } catch(e) {}
+            renderTable(JSON.parse(event.data));
         };
-        socket.onclose = function() { setTimeout(connect, 2000); };
+        socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
     function renderTable(data) {
         const container = document.getElementById('table-content');
-        if (!container) return;
-        let html = '<div class="row header"><div>Имя</div><div style="text-align:center">1</div><div style="text-align:center">2</div><div style="text-align:center">3</div><div style="text-align:center">Ячейка Х</div></div>';
-        for (const name in data) {
-            const info = data[name];
-            html += '<div class="row">' +
-                '<button class="name-btn" onclick="clickName(\'' + name + '\')">' + name + '</button>' +
-                '<div class="square ' + info.squares[0] + '">' + formatTime(info.timers[0]) + '</div>' +
-                '<div class="square ' + info.squares[1] + '">' + formatTime(info.timers[1]) + '</div>' +
-                '<div class="square ' + info.squares[2] + '">' + formatTime(info.timers[2]) + '</div>' +
-                '<div class="cell-x">' + formatPenalty(info.penalty_minutes) + '</div>' +
-            '</div>';
+        let html = `<div class="row header"><div>Имя</div><div style="text-align:center">1</div><div style="text-align:center">2</div><div style="text-align:center">3</div><div style="text-align:center">Ячейка Х</div></div>`;
+        for (const [name, info] of Object.entries(data)) {
+            html += `<div class="row">
+                <button class="name-btn" onclick="clickName('${name}')">${name}</button>
+                <div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div>
+                <div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div>
+                <div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div>
+                <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
+            </div>`;
         }
         container.innerHTML = html;
     }
@@ -156,23 +134,39 @@ def handle_click(name: str):
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
 
+async def tick_processing():
+    while True:
+        await asyncio.sleep(1)
+        for name, child in CHILDREN_DATA.items():
+            for i in range(3):
+                if child["timers"][i] > 0:
+                    child["timers"][i] -= 1
+                    if child["timers"][i] == 0:
+                        child["squares"][i] = "gray"
+        await broadcast_state()
+
+async def broadcast_state():
+    if active_connections:
+        tasks = [connection.send_json(CHILDREN_DATA) for connection in active_connections]
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(tick_processing())
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.append(websocket)
+    await websocket.send_json(CHILDREN_DATA)
     try:
-        await websocket.send_json(CHILDREN_DATA)
         while True:
             data = await websocket.receive_json()
             if data.get("action") == "click":
                 handle_click(data.get("name"))
                 await broadcast_state()
     except WebSocketDisconnect:
-        if websocket in active_connections:
-            active_connections.remove(websocket)
-    except Exception:
-        if websocket in active_connections:
-            active_connections.remove(websocket)
+        active_connections.remove(websocket)
 
 if __name__ == "__main__":
     import uvicorn
