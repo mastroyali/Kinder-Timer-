@@ -26,6 +26,7 @@ SYSTEM_FLAGS = {
 
 TIMER_DURATION = 20 * 60 
 
+# HTML шаблон полностью изолирован от f-строк Python во избежание конфликтов синтаксиса {}
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="ru">
@@ -134,7 +135,7 @@ HTML_TEMPLATE = """
 <body>
 <div class="container" onclick="initAudio()">
     <h2>Мониторинг Наказаний</h2>
-    <div class="table" id="table-content">Инициализация интерфейса...</div>
+    <div class="table" id="table-content">Инициализация...</div>
 </div>
 
 <script>
@@ -192,7 +193,7 @@ HTML_TEMPLATE = """
         return "-" + m + "m";
     }
 
-    // 100% Кроссплатформенный JSONP-метод получения данных
+    // Бронебойный JSONP метод добавления скрипта в DOM
     function jsonpRequest(url) {
         var oldScript = document.getElementById("jsonp-buffer");
         if (oldScript) {
@@ -200,11 +201,14 @@ HTML_TEMPLATE = """
         }
         var script = document.createElement("script");
         script.id = "jsonp-buffer";
+        script.type = "text/javascript";
         script.src = url + "?ts=" + new Date().getTime();
-        document.body.appendChild(script);
+        
+        // Гарантированная вставка для старых браузеров
+        var target = document.getElementsByTagName("script")[0] || document.body.firstChild;
+        target.parentNode.insertBefore(script, target);
     }
 
-    // Обработчик ответа от сервера
     window.onServerResponse = function(response) {
         if (response && response.play_sound) {
             playBeep();
@@ -262,17 +266,14 @@ async def get():
 
 @app.get("/api/state")
 async def get_state(ts: str = None):
-    current_sound = True if SYSTEM_FLAGS["play_sound"] else False
+    current_sound = "true" if SYSTEM_FLAGS["play_sound"] else "false"
     SYSTEM_FLAGS["play_sound"] = False
     
-    # Формируем структуру ответа
-    response_obj = {
-        "play_sound": current_sound,
-        "data": CHILDREN_DATA
-    }
+    # Формируем JSON строку
+    data_json = json.dumps(CHILDREN_DATA)
     
-    # Преобразуем объект в валидный JSON строку и оборачиваем в функцию обратного вызова
-    js_code = f"window.onServerResponse({json.dumps(response_obj)});"
+    # Собираем чистый JS код без использования f-строк Python
+    js_code = "window.onServerResponse({\"play_sound\": " + current_sound + ", \"data\": " + data_json + "});"
     return HTMLResponse(content=js_code, media_type="application/javascript")
 
 @app.get("/api/click/{name}")
@@ -281,12 +282,8 @@ async def get_click(name: str, ts: str = None):
         handle_click(name)
         SYSTEM_FLAGS["play_sound"] = True
         
-    response_obj = {
-        "play_sound": False,
-        "data": CHILDREN_DATA
-    }
-    
-    js_code = f"window.onServerResponse({json.dumps(response_obj)});"
+    data_json = json.dumps(CHILDREN_DATA)
+    js_code = "window.onServerResponse({\"play_sound\": false, \"data\": " + data_json + "});"
     return HTMLResponse(content=js_code, media_type="application/javascript")
 
 def handle_click(name: str):
