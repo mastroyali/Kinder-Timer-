@@ -4,16 +4,15 @@ import uuid
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 
 app = FastAPI()
 
 # Пароль для активации режима Администратора
-ADMIN_PASSWORD = "3003"
+ADMIN_PASSWORD = "1234"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
-    "ERIC": {
+    "ERIK": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0,
@@ -30,7 +29,6 @@ CHILDREN_DATA = {
 SYSTEM_LOGS = []
 
 # Структура для отслеживания активных соединений и их прав
-# Хранит dict вида: { websocket_object: {"id": str, "is_admin": bool} }
 ACTIVE_CONNECTIONS = {}
 
 def add_log(message: str):
@@ -61,12 +59,19 @@ HTML_TEMPLATE = """
         }
         
         .container { 
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
             width: 100vw; 
             min-height: 100vh;
             box-sizing: border-box;
             padding: 15px;
+            -webkit-box-pack: justify;
+            -ms-flex-pack: justify;
             justify-content: space-between;
         }
         
@@ -79,9 +84,16 @@ HTML_TEMPLATE = """
         }
         
         .cards-wrapper { 
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
             gap: 20px;
+            -webkit-box-flex: 1;
+            -ms-flex-positive: 1;
             flex-grow: 1;
             width: 100%;
             box-sizing: border-box;
@@ -93,8 +105,14 @@ HTML_TEMPLATE = """
             padding: 18px; 
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             border: 3px solid #3d3d4e;
+            -webkit-transition: all 0.3s ease;
             transition: all 0.3s ease;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
             gap: 15px;
         }
@@ -126,21 +144,43 @@ HTML_TEMPLATE = """
             opacity: 0.8;
         }
         
+        /* Сетка для Chrome 63 */
         .controls-row {
             display: grid;
             grid-template-columns: repeat(3, 1fr) 1.3fr;
+            grid-gap: 10px;
             gap: 10px;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             width: 100%;
         }
         
-        .square { 
-            aspect-ratio: 1 / 1;
+        /* Контейнер для фикса отсутствия aspect-ratio в старом Chrome */
+        .square-wrapper {
+            position: relative;
             width: 100%;
+            padding-top: 100%; /* Делает блок идеально квадратным */
+        }
+        
+        .square { 
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%;
+            height: 100%;
             border-radius: 14px; 
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex; 
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
             justify-content: center; 
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center; 
             font-size: 14px; 
             font-weight: bold; 
@@ -164,61 +204,88 @@ HTML_TEMPLATE = """
         .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         
+        /* Обертка для штрафной ячейки, чтобы совпадала по высоте с квадратами */
+        .cell-x-wrapper {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+        }
+
         .cell-x { 
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            width: 100%;
             height: 100%;
-            min-height: 75px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex; 
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
             justify-content: center; 
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center; 
             font-size: 19px; 
             font-weight: bold; 
             color: #ff5252 !important; 
-            width: 100%;
             box-sizing: border-box;
             -webkit-appearance: none;
             appearance: none;
         }
 
-        /* Контейнер регулировки штрафа для режима редактирования */
         .penalty-edit-container {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
             display: grid;
             grid-template-columns: 1fr 1fr;
+            grid-gap: 5px;
             gap: 5px;
-            height: 100%;
             width: 100%;
+            height: 100%;
             box-sizing: border-box;
         }
 
         .penalty-edit-btn {
+            width: 100%;
             height: 100%;
-            min-height: 75px;
             border: 2px solid #ff69b4;
             border-radius: 12px;
             font-size: 24px;
             font-weight: bold;
             cursor: pointer;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
             justify-content: center;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             -webkit-appearance: none;
+            appearance: none;
         }
         .btn-inc { background-color: #2e7d32; color: #fff; }
         .btn-dec { background-color: #c62828; color: #fff; }
 
-        /* Нижняя панель управления системными кнопками */
         .bottom-bar {
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-pack: justify;
+            -ms-flex-pack: justify;
             justify-content: space-between;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             width: 100%;
             padding: 15px 10px 5px 10px;
             box-sizing: border-box;
         }
 
-        /* Кнопка Администратора "А" */
         .admin-trigger-btn {
             width: 36px;
             height: 36px;
@@ -229,11 +296,19 @@ HTML_TEMPLATE = """
             font-size: 16px;
             font-weight: bold;
             cursor: pointer;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
             justify-content: center;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
+            -webkit-transition: all 0.3s ease;
             transition: all 0.3s ease;
             -webkit-appearance: none;
+            appearance: none;
         }
 
         .admin-trigger-btn.admin-active {
@@ -252,18 +327,22 @@ HTML_TEMPLATE = """
             cursor: pointer;
             padding: 5px 10px;
             -webkit-appearance: none;
+            appearance: none;
         }
         
         .log-trigger-btn:active { color: #8a8a9a; }
 
-        /* Модальные окна */
         .modal-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
             background-color: rgba(0,0,0,0.85);
             z-index: 1000;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
             justify-content: center;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             box-sizing: border-box;
             padding: 20px;
@@ -276,7 +355,12 @@ HTML_TEMPLATE = """
             width: 100%;
             max-width: 450px;
             height: 75vh;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
             overflow: hidden;
         }
@@ -284,8 +368,14 @@ HTML_TEMPLATE = """
         .modal-header {
             padding: 15px;
             border-bottom: 1px solid #3d3d4e;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-pack: justify;
+            -ms-flex-pack: justify;
             justify-content: space-between;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             font-weight: bold;
             color: #a0a0ab;
@@ -302,6 +392,8 @@ HTML_TEMPLATE = """
         }
 
         .log-content {
+            -webkit-box-flex: 1;
+            -ms-flex-positive: 1;
             flex-grow: 1;
             padding: 15px;
             overflow-y: auto;
@@ -314,16 +406,23 @@ HTML_TEMPLATE = """
             user-select: text;
         }
 
-        /* Окно ввода пароля */
         .auth-window {
             background-color: #1e1e24;
             border: 2px solid #3d3d4e;
             border-radius: 16px;
             width: 280px;
             padding: 20px;
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
             flex-direction: column;
+            grid-gap: 15px;
             gap: 15px;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
             align-items: center;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
@@ -353,12 +452,17 @@ HTML_TEMPLATE = """
         }
 
         .auth-buttons {
+            display: -webkit-box;
+            display: -ms-flexbox;
             display: flex;
+            grid-gap: 10px;
             gap: 10px;
             width: 100%;
         }
 
         .auth-btn {
+            -webkit-box-flex: 1;
+            -ms-flex: 1;
             flex: 1;
             padding: 10px;
             border-radius: 8px;
@@ -374,7 +478,7 @@ HTML_TEMPLATE = """
 <body>
 <div class="container" pointerdown="initAudio()">
     <div>
-        <h2>ЧУПРА</h2>
+        <h2>Мониторинг Наказаний</h2>
         <div class="cards-wrapper" id="table-content"></div>
     </div>
     
@@ -401,22 +505,22 @@ HTML_TEMPLATE = """
         <div class="auth-title">Вход в режим "А"</div>
         <input type="password" class="auth-input" id="authPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••">
         <div class="auth-buttons">
-            <button class="auth-btn class auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
+            <button class="auth-btn auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
             <button class="auth-btn auth-confirm" onclick="submitAuth()">Войти</button>
         </div>
     </div>
 </div>
 
 <script>
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = protocol + window.location.host + '/ws';
-    let socket;
-    let audioCtx = null;
-    let pressTimer = null;
+    var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var wsUrl = protocol + window.location.host + '/ws';
+    var socket;
+    var audioCtx = null;
+    var pressTimer = null;
     
-    let lastClickTime = 0;
-    const CLICK_DEBOUNCE_MS = 300;
-    let clientIsAdmin = false; // Локальный статус админа для отрисовки
+    var lastClickTime = 0;
+    var CLICK_DEBOUNCE_MS = 300;
+    var clientIsAdmin = false;
 
     function initAudio() {
         if (!audioCtx) {
@@ -431,8 +535,8 @@ HTML_TEMPLATE = """
         initAudio();
         if (!audioCtx) return;
         try {
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
+            var oscillator = audioCtx.createOscillator();
+            var gainNode = audioCtx.createGain();
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
             gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
@@ -446,28 +550,28 @@ HTML_TEMPLATE = """
 
     function formatTime(seconds) {
         if (seconds <= 0) return "";
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m}m${s}s`;
+        var m = Math.floor(seconds / 60);
+        var s = seconds % 60;
+        return m + "m" + s + "s";
     }
 
     function formatPenalty(minutes) {
         if (minutes === 0) return "0m";
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        if (h > 0) return `-${h}h${m}m`;
-        return `-${m}m`;
+        var h = Math.floor(minutes / 60);
+        var m = minutes % 60;
+        if (h > 0) return "-" + h + "h" + m + "m";
+        return "-" + m + "m";
     }
 
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            const response = JSON.parse(event.data);
+            var response = JSON.parse(event.data);
             if (response.play_sound) playBeep();
             
-            if (response.hasOwnProperty("is_admin")) {
+            if ("is_admin" in response) {
                 clientIsAdmin = response.is_admin;
-                const btn = document.getElementById("adminBtn");
+                var btn = document.getElementById("adminBtn");
                 if (clientIsAdmin) {
                     btn.classList.add("admin-active");
                 } else {
@@ -482,51 +586,53 @@ HTML_TEMPLATE = """
     }
 
     function renderTable(data) {
-        const container = document.getElementById('table-content');
+        var container = document.getElementById('table-content');
         if (!container) return;
         
-        let html = "";
-        for (const [name, info] of Object.entries(data)) {
-            const editClass = info.edit_mode ? "edit-active" : "";
-            const isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
-            const nameDisabled = clientIsAdmin ? "" : "disabled";
+        var html = "";
+        for (var name in data) {
+            if (!data.hasOwnProperty(name)) continue;
+            var info = data[name];
+            var editClass = info.edit_mode ? "edit-active" : "";
+            var isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
+            var nameDisabled = clientIsAdmin ? "" : "disabled";
 
-            // Генерируем блок штрафа: либо обычная ячейка, либо +/- в режиме редактирования
-            let penaltyBlockHtml = "";
+            var penaltyBlockHtml = "";
             if (info.edit_mode && clientIsAdmin) {
-                penaltyBlockHtml = `
-                <div class="penalty-edit-container">
-                    <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('${name}', 'inc')">+</button>
-                    <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('${name}', 'dec')">-</button>
-                </div>`;
+                penaltyBlockHtml = '<div class="penalty-edit-container">' +
+                    '<button class="penalty-edit-btn btn-inc" onclick="modifyPenalty(\'' + name + '\', \'inc\')">+</button>' +
+                    '<button class="penalty-edit-btn btn-dec" onclick="modifyPenalty(\'' + name + '\', \'dec\')">-</button>' +
+                '</div>';
             } else {
-                penaltyBlockHtml = `
-                <button class="cell-x" disabled>
-                    ${formatPenalty(info.penalty_minutes)}
-                </button>`;
+                penaltyBlockHtml = '<button class="cell-x" disabled>' + formatPenalty(info.penalty_minutes) + '</button>';
             }
 
-            html += `
-            <div class="user-card ${editClass}">
-                <button class="name-btn" ${nameDisabled}
-                        onpointerdown="startPress(event, '${name}')" 
-                        onpointerup="endPress(event, '${name}')" 
-                        onpointerleave="cancelPress()">
-                    ${name}${info.edit_mode ? " ⚙" : ""}
-                </button>
-                <div class="controls-row">
-                    <button class="square ${info.squares[0]}" ${isClickable} onclick="clickElement('${name}', 0)">
-                        <span>1</span><strong>${formatTime(info.timers[0])}</strong>
-                    </button>
-                    <button class="square ${info.squares[1]}" ${isClickable} onclick="clickElement('${name}', 1)">
-                        <span>2</span><strong>${formatTime(info.timers[1])}</strong>
-                    </button>
-                    <button class="square ${info.squares[2]}" ${isClickable} onclick="clickElement('${name}', 2)">
-                        <span>3</span><strong>${formatTime(info.timers[2])}</strong>
-                    </button>
-                    ${penaltyBlockHtml}
-                </div>
-            </div>`;
+            html += '<div class="user-card ' + editClass + '">' +
+                '<button class="name-btn" ' + nameDisabled + ' ' +
+                        'onpointerdown="startPress(event, \'' + name + '\')" ' +
+                        'onpointerup="endPress(event, \'' + name + '\')" ' +
+                        'onpointerleave="cancelPress()">' +
+                    name + (info.edit_mode ? " ⚙" : "") +
+                '</button>' +
+                '<div class="controls-row">' +
+                    '<div class="square-wrapper">' +
+                        '<button class="square ' + info.squares[0] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 0)">' +
+                            '<span>1</span><strong>' + formatTime(info.timers[0]) + '</strong>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="square-wrapper">' +
+                        '<button class="square ' + info.squares[1] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 1)">' +
+                            '<span>2</span><strong>' + formatTime(info.timers[1]) + '</strong>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="square-wrapper">' +
+                        '<button class="square ' + info.squares[2] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 2)">' +
+                            '<span>3</span><strong>' + formatTime(info.timers[2]) + '</strong>' +
+                        '</button>' +
+                    '</div>' +
+                    '<div class="cell-x-wrapper">' + penaltyBlockHtml + '</div>' +
+                '</div>' +
+            '</div>';
         }
         container.innerHTML = html;
     }
@@ -537,10 +643,10 @@ HTML_TEMPLATE = """
         initAudio();
         cancelPress();
         
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
 
-        pressTimer = setTimeout(() => {
+        pressTimer = setTimeout(function() {
             sendAction({ "action": "long_press", "name": name });
             pressTimer = null;
             lastClickTime = new Date().getTime();
@@ -550,7 +656,7 @@ HTML_TEMPLATE = """
     function endPress(e, name) {
         if (!clientIsAdmin) return;
         e.preventDefault();
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         
         if (pressTimer !== null) {
             clearTimeout(pressTimer);
@@ -572,7 +678,7 @@ HTML_TEMPLATE = """
 
     function clickElement(name, elementIdx) {
         if (!clientIsAdmin) return;
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
         lastClickTime = currentTime;
         
@@ -586,7 +692,6 @@ HTML_TEMPLATE = """
 
     function clickAdminButton() {
         if (clientIsAdmin) {
-            // Если уже админ — выходим без запроса пароля
             sendAction({ "action": "admin_logout" });
         } else {
             document.getElementById("authPin").value = "";
@@ -596,7 +701,7 @@ HTML_TEMPLATE = """
     }
 
     function submitAuth() {
-        const pin = document.getElementById("authPin").value;
+        var pin = document.getElementById("authPin").value;
         if (pin.length === 4) {
             sendAction({ "action": "admin_login", "password": pin });
             document.getElementById("authOverlay").style.display = "none";
@@ -615,7 +720,7 @@ HTML_TEMPLATE = """
     }
 
     function renderLogs(logsList) {
-        const content = document.getElementById('logContent');
+        var content = document.getElementById('logContent');
         if (content) {
             content.textContent = logsList.length > 0 ? logsList.reverse().join('\\n') : "История пуста.";
         }
@@ -657,7 +762,6 @@ def handle_click(name: str):
         add_log(f"Для {name} активировано 3-е предупреждение (Красный квадрат).")
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
-        # Новая логика: время в предыдущем (3-м) кубике снова становится 20 минут
         child["timers"][2] = TIMER_DURATION
         add_log(f"Для {name} добавлено +20 минут штрафа. Время 3-го кубика возвращено на 20 мин. Всего штрафа: {child['penalty_minutes']}м.")
 
@@ -717,7 +821,6 @@ async def tick_processing():
 
 async def broadcast_state(play_sound: bool = False):
     if ACTIVE_CONNECTIONS:
-        # Каждому клиенту шлем общие данные + его личный статус админа
         for ws, client_info in list(ACTIVE_CONNECTIONS.items()):
             payload = {
                 "data": CHILDREN_DATA,
@@ -738,10 +841,8 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    # Регистрируем устройство на сервере со статусом "не админ" по умолчанию
     ACTIVE_CONNECTIONS[websocket] = {"id": str(uuid.uuid4()), "is_admin": False}
     
-    # Первичный пакет данных для подключившегося устройства
     await websocket.send_json({
         "data": CHILDREN_DATA, 
         "play_sound": False, 
@@ -755,11 +856,9 @@ async def websocket_endpoint(websocket: WebSocket):
             action = data.get("action")
             name = data.get("name")
             
-            # Проверяем, авторизован ли текущий клиент как администратор
             client_info = ACTIVE_CONNECTIONS.get(websocket, {"is_admin": False})
             is_client_admin = client_info["is_admin"]
             
-            # Действия авторизации (доступны всем)
             if action == "admin_login":
                 password = data.get("password")
                 if password == ADMIN_PASSWORD:
@@ -778,7 +877,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"logs": SYSTEM_LOGS})
                 continue
 
-            # Защищенные действия (требуют прав "А" на этом устройстве)
             if not is_client_admin:
                 continue
 
