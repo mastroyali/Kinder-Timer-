@@ -709,7 +709,7 @@ def handle_modify_penalty(name: str, operation: str):
             add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
 async def auto_disable_edit_mode(name: str):
-    await asyncio.sleep(5)
+    await asyncio.sleep(25)
     if CHILDREN_DATA[name]["edit_mode"]:
         CHILDREN_DATA[name]["edit_mode"] = False
         add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту.")
