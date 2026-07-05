@@ -141,12 +141,12 @@ HTML_TEMPLATE = """
 
         /* Таймер стал ещё крупнее и находится строго по центру кубика */
         .square strong {
-            font-size: 36px; 
+            font-size: 55px; 
             font-weight: 900;
             display: block;
             letter-spacing: -0.5px;
             text-align: center;
-            line-height: 90px;
+            line-height: 84px;
         }
         
         .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
