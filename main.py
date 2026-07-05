@@ -7,7 +7,6 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-# Пароль для активации режима Администратора
 ADMIN_PASSWORD = "1234"
 TIMER_DURATION = 20 * 60 
 
@@ -31,7 +30,7 @@ ACTIVE_CONNECTIONS = {}
 
 def add_log(message: str):
     now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-    SYSTEM_LOGS.append("[" + now + "] " + message)
+    SYSTEM_LOGS.append(f"[{now}] {message}")
     if len(SYSTEM_LOGS) > 100:
         SYSTEM_LOGS.pop(0)
 
@@ -49,7 +48,7 @@ HTML_TEMPLATE = """
             padding: 0;
             background-color: #141419;
             color: #ffffff;
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: Arial, sans-serif;
             overflow-x: hidden;
             overflow-y: auto;
             -webkit-user-select: none;
@@ -59,19 +58,21 @@ HTML_TEMPLATE = """
         .container { 
             display: flex;
             flex-direction: column;
-            width: 100vw; 
+            width: 100%; 
             min-height: 100vh;
             box-sizing: border-box;
             padding: 15px;
-            justify-content: space-between;
+        }
+        
+        .main-content {
+            flex: 1 0 auto;
         }
         
         h2 { 
             text-align: center; 
             color: #a0a0ab; 
             margin: 0 0 20px 0; 
-            font-size: 28px;
-            letter-spacing: 0.5px;
+            font-size: 26px;
         }
         
         .cards-wrapper { 
@@ -85,11 +86,9 @@ HTML_TEMPLATE = """
             background-color: #1e1e24; 
             border-radius: 20px; 
             padding: 18px; 
+            margin-bottom: 20px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             border: 3px solid #3d3d4e;
-            display: flex;
-            flex-direction: column;
-            margin-bottom: 20px; /* Замена gap */
         }
 
         .user-card.edit-active {
@@ -102,21 +101,14 @@ HTML_TEMPLATE = """
             border: 2px solid #444454; 
             padding: 14px; 
             border-radius: 14px; 
-            font-size: 26px; 
+            font-size: 24px; 
             font-weight: bold; 
             cursor: pointer; 
             width: 100%;
             box-sizing: border-box;
             text-align: center;
-            margin-bottom: 15px; /* Замена gap */
-            -webkit-appearance: none;
-            appearance: none;
-            touch-action: none;
-        }
-        
-        .name-btn:disabled {
-            cursor: default;
-            opacity: 0.8;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
         
         .controls-row {
@@ -124,17 +116,12 @@ HTML_TEMPLATE = """
             justify-content: space-between;
             align-items: center;
             width: 100%;
-        }
-
-        .controls-row .square, 
-        .controls-row .cell-x,
-        .controls-row .penalty-edit-container {
-            width: 23%;
-            box-sizing: border-box;
+            margin-top: 15px;
         }
         
         .square { 
-            aspect-ratio: 1 / 1;
+            width: 23%;
+            height: 75px;
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
@@ -143,26 +130,21 @@ HTML_TEMPLATE = """
             font-size: 14px; 
             font-weight: bold; 
             border: 3px solid #444454;
-            -webkit-appearance: none;
-            appearance: none;
-        }
-
-        .square:disabled, .cell-x:disabled {
-            cursor: default;
-        }
-
-        .edit-active .square:not(.gray) {
-            cursor: pointer;
-            border-color: #ff69b4 !important;
+            box-sizing: border-box;
+            background-color: #3d3d4e;
+            color: #ffffff;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
         
-        .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
-        .yellow { background-color: #fbc02d !important; color: #000000 !important; border-color: #fff350; text-shadow: none; }
-        .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
-        .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
+        .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
+        .yellow { background-color: #fbc02d !important; color: #000000 !important; border-color: #fff350; }
+        .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; }
+        .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; }
         
         .cell-x { 
-            min-height: 72px;
+            width: 23%;
+            height: 75px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
@@ -172,19 +154,20 @@ HTML_TEMPLATE = """
             font-size: 16px; 
             font-weight: bold; 
             color: #ff5252 !important; 
-            -webkit-appearance: none;
-            appearance: none;
+            box-sizing: border-box;
         }
 
         .penalty-edit-container {
+            width: 23%;
+            height: 75px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
-            min-height: 72px;
+            box-sizing: border-box;
         }
 
         .penalty-edit-btn {
-            height: 32px; /* Фиксированная высота для старых браузеров */
+            height: 35px;
             border: 2px solid #ff69b4;
             border-radius: 8px;
             font-size: 18px;
@@ -193,24 +176,26 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: center;
             align-items: center;
-            -webkit-appearance: none;
-            appearance: none;
+            color: #fff;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
-        .btn-inc { background-color: #2e7d32; color: #fff; margin-bottom: 5px; }
-        .btn-dec { background-color: #c62828; color: #fff; }
+        .btn-inc { background-color: #2e7d32; }
+        .btn-dec { background-color: #c62828; }
 
         .bottom-bar {
+            flex: 0 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
             width: 100%;
-            padding: 15px 10px 5px 10px;
+            padding: 10px 0;
             box-sizing: border-box;
         }
 
         .admin-trigger-btn {
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             border: 2px solid #444454;
             background-color: #2b2b36;
@@ -221,8 +206,8 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: center;
             align-items: center;
-            -webkit-appearance: none;
-            appearance: none;
+            outline: none;
+            -webkit-tap-highlight-color: transparent;
         }
 
         .admin-trigger-btn.admin-active {
@@ -235,18 +220,15 @@ HTML_TEMPLATE = """
             background: none;
             border: none;
             color: #4a4a5a;
-            font-size: 13px;
+            font-size: 14px;
             text-decoration: underline;
             cursor: pointer;
-            padding: 5px 10px;
-            -webkit-appearance: none;
-            appearance: none;
         }
 
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0; width: 100vw; height: 100vh;
+            top: 0; left: 0; width: 100%; height: 100%;
             background-color: rgba(0,0,0,0.85);
             z-index: 1000;
             justify-content: center;
@@ -261,10 +243,9 @@ HTML_TEMPLATE = """
             border-radius: 16px;
             width: 100%;
             max-width: 450px;
-            height: 75vh;
+            height: 70vh;
             display: flex;
             flex-direction: column;
-            overflow: hidden;
         }
 
         .modal-header {
@@ -283,8 +264,6 @@ HTML_TEMPLATE = """
             color: #fff;
             border-radius: 8px;
             padding: 6px 14px;
-            cursor: pointer;
-            font-size: 14px;
         }
 
         .log-content {
@@ -292,12 +271,9 @@ HTML_TEMPLATE = """
             padding: 15px;
             overflow-y: auto;
             font-family: monospace;
-            font-size: 12px;
-            line-height: 1.5;
+            font-size: 13px;
             color: #d1d1d6;
             white-space: pre-wrap;
-            -webkit-user-select: text;
-            user-select: text;
         }
 
         .auth-window {
@@ -309,7 +285,6 @@ HTML_TEMPLATE = """
             display: flex;
             flex-direction: column;
             align-items: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
 
         .auth-title {
@@ -328,10 +303,8 @@ HTML_TEMPLATE = """
             color: #fff;
             font-size: 22px;
             text-align: center;
-            letter-spacing: 6px;
-            box-sizing: border-box;
-            outline: none;
             margin-bottom: 15px;
+            outline: none;
         }
 
         .auth-buttons {
@@ -345,18 +318,55 @@ HTML_TEMPLATE = """
             border-radius: 8px;
             border: none;
             font-weight: bold;
-            cursor: pointer;
             font-size: 14px;
+            color: white;
+            margin: 0 5px;
         }
-        .auth-confirm { background-color: #4caf50; color: white; margin-left: 10px; }
-        .auth-cancel { background-color: #3d3d4e; color: white; }
+        .auth-confirm { background-color: #4caf50; }
+        .auth-cancel { background-color: #3d3d4e; }
     </style>
 </head>
-<body pointerdown="initAudio()">
+<body>
 <div class="container">
-    <div>
+    <div class="main-content">
         <h2>Мониторинг Наказаний</h2>
-        <div class="cards-wrapper" id="table-content"></div>
+        <div class="cards-wrapper">
+            
+            <!-- КАРТОЧКА ERIK -->
+            <div id="card_ERIK" class="user-card">
+                <button id="name_ERIK" class="name-btn">ERIK</button>
+                <div class="controls-row">
+                    <button id="sq_ERIK_0" class="square"><span>1</span><strong id="t_ERIK_0"></strong></button>
+                    <button id="sq_ERIK_1" class="square"><span>2</span><strong id="t_ERIK_1"></strong></button>
+                    <button id="sq_ERIK_2" class="square"><span>3</span><strong id="t_ERIK_2"></strong></button>
+                    
+                    <!-- Блок отображения штрафа -->
+                    <div id="p_view_ERIK" class="cell-x">0m</div>
+                    <!-- Блок изменения штрафа (режим А) -->
+                    <div id="p_edit_ERIK" class="penalty-edit-container" style="display:none;">
+                        <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('ERIK', 'inc')">+</button>
+                        <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('ERIK', 'dec')">-</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- КАРТОЧКА NICK -->
+            <div id="card_NICK" class="user-card">
+                <button id="name_NICK" class="name-btn">NICK</button>
+                <div class="controls-row">
+                    <button id="sq_NICK_0" class="square"><span>1</span><strong id="t_NICK_0"></strong></button>
+                    <button id="sq_NICK_1" class="square"><span>2</span><strong id="t_NICK_1"></strong></button>
+                    <button id="sq_NICK_2" class="square"><span>3</span><strong id="t_NICK_2"></strong></button>
+                    
+                    <div id="p_view_NICK" class="cell-x">0m</div>
+                    <div id="p_edit_NICK" class="penalty-edit-container" style="display:none;">
+                        <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('NICK', 'inc')">+</button>
+                        <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('NICK', 'dec')">-</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
     </div>
     
     <div class="bottom-bar">
@@ -365,6 +375,7 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
+<!-- Модальные окна -->
 <div class="modal-overlay" id="logOverlay" onclick="closeModal('logOverlay', event)">
     <div class="log-window" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -387,12 +398,12 @@ HTML_TEMPLATE = """
 </div>
 
 <script>
-    // Полный переход на ES5 синтаксис (совместимость со старыми браузерами 2017 года)
     var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     var wsUrl = protocol + window.location.host + '/ws';
     var socket;
     var audioCtx = null;
     var pressTimer = null;
+    var isLongPressTriggered = false;
     
     var lastClickTime = 0;
     var CLICK_DEBOUNCE_MS = 300;
@@ -421,7 +432,7 @@ HTML_TEMPLATE = """
             gainNode.connect(audioCtx.destination);
             oscillator.start();
             oscillator.stop(audioCtx.currentTime + 0.2);
-        } catch (e) { console.log(e); }
+        } catch (e) {}
     }
 
     function formatTime(seconds) {
@@ -439,13 +450,83 @@ HTML_TEMPLATE = """
         return "-" + m + "m";
     }
 
+    // Привязываем старые события мыши и тача к именам детей напрямую
+    function bindEvents(name) {
+        var btn = document.getElementById("name_" + name);
+        if (!btn) return;
+
+        var startHandler = function(e) {
+            if (!clientIsAdmin) return;
+            initAudio();
+            isLongPressTriggered = false;
+            
+            if (pressTimer) clearTimeout(pressTimer);
+            
+            pressTimer = setTimeout(function() {
+                sendAction({ "action": "long_press", "name": name });
+                isLongPressTriggered = true;
+                pressTimer = null;
+            }, 3000); // 3 секунды удержания
+        };
+
+        var endHandler = function(e) {
+            if (!clientIsAdmin) return;
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+            if (!isLongPressTriggered) {
+                var currentTime = new Date().getTime();
+                if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
+                    sendAction({ "action": "click", "name": name });
+                    lastClickTime = currentTime;
+                }
+            }
+            isLongPressTriggered = false;
+        };
+
+        var cancelHandler = function() {
+            if (pressTimer) {
+                clearTimeout(pressTimer);
+                pressTimer = null;
+            }
+        };
+
+        // Старый стандарт TouchEvents
+        btn.ontouchstart = startHandler;
+        btn.ontouchend = endHandler;
+        btn.ontouchcancel = cancelHandler;
+
+        // MouseEvents для ПК и старых систем без поддержки тача
+        btn.onmousedown = startHandler;
+        btn.onmouseup = endHandler;
+        btn.onmouseout = cancelHandler;
+
+        // Вешаем обычные клики на квадраты
+        for (var i = 0; i < 3; i++) {
+            (function(idx) {
+                var sq = document.getElementById("sq_" + name + "_" + idx);
+                sq.onclick = function() {
+                    if (!clientIsAdmin) return;
+                    var cardData = window.lastData ? window.lastData[name] : null;
+                    if (cardData && cardData.edit_mode) {
+                        var currentTime = new Date().getTime();
+                        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
+                        lastClickTime = currentTime;
+                        sendAction({ "action": "cancel_element", "name": name, "element": idx });
+                    }
+                };
+            })(i);
+        }
+    }
+
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
             var response = JSON.parse(event.data);
             if (response.play_sound) playBeep();
             
-            if (Object.prototype.hasOwnProperty.call(response, "is_admin")) {
+            if (response.is_admin !== undefined) {
                 clientIsAdmin = response.is_admin;
                 var btn = document.getElementById("adminBtn");
                 if (clientIsAdmin) {
@@ -455,110 +536,54 @@ HTML_TEMPLATE = """
                 }
             }
             
-            if (response.data) renderTable(response.data);
+            if (response.data) {
+                window.lastData = response.data;
+                updateChildUI("ERIK", response.data["ERIK"]);
+                updateChildUI("NICK", response.data["NICK"]);
+            }
             if (response.logs) renderLogs(response.logs);
         };
         socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
-    function renderTable(data) {
-        var container = document.getElementById('table-content');
-        if (!container) return;
-        
-        var html = "";
-        
-        // Используем базовый for-in цикл без Object.keys/Object.entries
-        for (var name in data) {
-            if (Object.prototype.hasOwnProperty.call(data, name)) {
-                var info = data[name];
-                
-                var editClass = info.edit_mode ? "edit-active" : "";
-                var isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
-                var nameDisabled = clientIsAdmin ? "" : "disabled";
+    // Прямое обновление элементов вместо полного innerHTML перерендеринга
+    function updateChildUI(name, info) {
+        if (!info) return;
 
-                var penaltyBlockHtml = "";
-                if (info.edit_mode && clientIsAdmin) {
-                    penaltyBlockHtml = '<div class="penalty-edit-container">' +
-                        '<button class="penalty-edit-btn btn-inc" onclick="modifyPenalty(\'' + name + '\', \'inc\')">+</button>' +
-                        '<button class="penalty-edit-btn btn-dec" onclick="modifyPenalty(\'' + name + '\', \'dec\')">-</button>' +
-                    '</div>';
-                } else {
-                    penaltyBlockHtml = '<button class="cell-x" disabled>' +
-                        formatPenalty(info.penalty_minutes) +
-                    '</button>';
-                }
-
-                html += '<div class="user-card ' + editClass + '">' +
-                    '<button class="name-btn" ' + nameDisabled + ' ' +
-                            'onpointerdown="startPress(event, \'' + name + '\')" ' +
-                            'onpointerup="endPress(event, \'' + name + '\')" ' +
-                            'onpointerleave="cancelPress()">' +
-                        name + (info.edit_mode ? " ⚙" : "") +
-                    '</button>' +
-                    '<div class="controls-row">' +
-                        '<button class="square ' + info.squares[0] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 0)">' +
-                            '<span>1</span><strong>' + formatTime(info.timers[0]) + '</strong>' +
-                        '</button>' +
-                        '<button class="square ' + info.squares[1] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 1)">' +
-                            '<span>2</span><strong>' + formatTime(info.timers[1]) + '</strong>' +
-                        '</button>' +
-                        '<button class="square ' + info.squares[2] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 2)">' +
-                            '<span>3</span><strong>' + formatTime(info.timers[2]) + '</strong>' +
-                        '</button>' +
-                        penaltyBlockHtml +
-                    '</div>' +
-                '</div>';
-            }
+        var card = document.getElementById("card_" + name);
+        var nameBtn = document.getElementById("name_" + name);
+        
+        // Обновление заголовка режима редактирования
+        if (info.edit_mode) {
+            card.classList.add("edit-active");
+            nameBtn.innerHTML = name + " ⚙";
+        } else {
+            card.classList.remove("edit-active");
+            nameBtn.innerHTML = name;
         }
-        container.innerHTML = html;
-    }
 
-    function startPress(e, name) {
-        if (!clientIsAdmin) return;
-        e.preventDefault();
-        initAudio();
-        cancelPress();
-        
-        var currentTime = new Date().getTime();
-        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
-
-        pressTimer = setTimeout(function() {
-            sendAction({ "action": "long_press", "name": name });
-            pressTimer = null;
-            lastClickTime = new Date().getTime();
-        }, 3000); 
-    }
-
-    function endPress(e, name) {
-        if (!clientIsAdmin) return;
-        e.preventDefault();
-        var currentTime = new Date().getTime();
-        
-        if (pressTimer !== null) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
+        // Квадраты
+        for (var i = 0; i < 3; i++) {
+            var sq = document.getElementById("sq_" + name + "_" + i);
+            var tNode = document.getElementById("t_" + name + "_" + i);
             
-            if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
-                sendAction({ "action": "click", "name": name });
-                lastClickTime = currentTime;
-            }
+            // Сброс старых классов цвета
+            sq.className = "square " + info.squares[i];
+            tNode.innerHTML = formatTime(info.timers[i]);
         }
-    }
 
-    function cancelPress() {
-        if (pressTimer !== null) {
-            clearTimeout(pressTimer);
-            pressTimer = null;
+        // Штрафы
+        var pView = document.getElementById("p_view_" + name);
+        var pEdit = document.getElementById("p_edit_" + name);
+
+        if (info.edit_mode && clientIsAdmin) {
+            pView.style.display = "none";
+            pEdit.style.display = "flex";
+        } else {
+            pView.innerHTML = formatPenalty(info.penalty_minutes);
+            pView.style.display = "flex";
+            pEdit.style.display = "none";
         }
-    }
-
-    function clickElement(name, elementIdx) {
-        if (!clientIsAdmin) return;
-        var currentTime = new Date().getTime();
-        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
-        lastClickTime = currentTime;
-        
-        sendAction({ "action": "cancel_element", "name": name, "element": elementIdx });
     }
 
     function modifyPenalty(name, operation) {
@@ -598,12 +623,7 @@ HTML_TEMPLATE = """
     function renderLogs(logsList) {
         var content = document.getElementById('logContent');
         if (content) {
-            // Разворачиваем лог через классический цикл вместо .slice().reverse()
-            var text = "";
-            for (var i = logsList.length - 1; i >= 0; i--) {
-                text += logsList[i] + "\\n";
-            }
-            content.textContent = text ? text : "История пуста.";
+            content.textContent = logsList.length > 0 ? logsList.slice().reverse().join('\\n') : "История пуста.";
         }
     }
 
@@ -613,6 +633,10 @@ HTML_TEMPLATE = """
         }
     }
 
+    // Инициализируем привязку событий жестко к элементам
+    bindEvents("ERIK");
+    bindEvents("NICK");
+    
     connect();
 </script>
 </body>
