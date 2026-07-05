@@ -4,14 +4,16 @@ import uuid
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 app = FastAPI()
 
-ADMIN_PASSWORD = "3003"
+# Пароль для активации режима Администратора
+ADMIN_PASSWORD = "1234"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
-    "ERIС": {
+    "ERIC": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0,
@@ -26,6 +28,9 @@ CHILDREN_DATA = {
 }
 
 SYSTEM_LOGS = []
+
+# Структура для отслеживания активных соединений и их прав
+# Хранит dict вида: { websocket_object: {"id": str, "is_admin": bool} }
 ACTIVE_CONNECTIONS = {}
 
 def add_log(message: str):
@@ -48,7 +53,7 @@ HTML_TEMPLATE = """
             padding: 0;
             background-color: #141419;
             color: #ffffff;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
             overflow-x: hidden;
             overflow-y: auto;
             -webkit-user-select: none;
@@ -58,26 +63,26 @@ HTML_TEMPLATE = """
         .container { 
             display: flex;
             flex-direction: column;
-            width: 100%; 
+            width: 100vw; 
             min-height: 100vh;
             box-sizing: border-box;
             padding: 15px;
-        }
-        
-        .main-content {
-            flex: 1 0 auto;
+            justify-content: space-between;
         }
         
         h2 { 
             text-align: center; 
             color: #a0a0ab; 
             margin: 0 0 20px 0; 
-            font-size: 26px;
+            font-size: 28px;
+            letter-spacing: 0.5px;
         }
         
         .cards-wrapper { 
             display: flex;
             flex-direction: column;
+            gap: 20px;
+            flex-grow: 1;
             width: 100%;
             box-sizing: border-box;
         }
@@ -86,13 +91,17 @@ HTML_TEMPLATE = """
             background-color: #1e1e24; 
             border-radius: 20px; 
             padding: 18px; 
-            margin-bottom: 20px;
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             border: 3px solid #3d3d4e;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
         }
 
         .user-card.edit-active {
             border-color: #ff69b4 !important;
+            box-shadow: 0 0 20px rgba(255, 105, 180, 0.3);
         }
         
         .name-btn { 
@@ -101,27 +110,33 @@ HTML_TEMPLATE = """
             border: 2px solid #444454; 
             padding: 14px; 
             border-radius: 14px; 
-            font-size: 24px; 
+            font-size: 26px; 
             font-weight: bold; 
             cursor: pointer; 
             width: 100%;
             box-sizing: border-box;
             text-align: center;
-            outline: none;
-            -webkit-tap-highlight-color: transparent;
+            -webkit-appearance: none;
+            appearance: none;
+            touch-action: none;
+        }
+        
+        .name-btn:disabled {
+            cursor: default;
+            opacity: 0.8;
         }
         
         .controls-row {
-            display: flex;
-            justify-content: space-between;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr) 1.3fr;
+            gap: 10px;
             align-items: center;
             width: 100%;
-            margin-top: 15px;
         }
         
         .square { 
-            width: 23%;
-            height: 85px;
+            aspect-ratio: 1 / 1;
+            width: 100%;
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
@@ -129,84 +144,84 @@ HTML_TEMPLATE = """
             align-items: center; 
             font-size: 14px; 
             font-weight: bold; 
-            border: 3px solid #444454;
             box-sizing: border-box;
-            background-color: #3d3d4e;
-            color: #ffffff;
-            outline: none;
-            -webkit-tap-highlight-color: transparent;
+            border: 3px solid #444454;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .square:disabled, .cell-x:disabled {
+            cursor: default;
+        }
+
+        .edit-active .square:not(.gray) {
+            cursor: pointer;
+            border-color: #ff69b4 !important;
         }
         
-        .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
-        .yellow { background-color: #fbc02d !important; color: #000000 !important; border-color: #fff350; }
-        .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; }
-        .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; }
+        .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
+        .yellow { background-color: #fbc02d !important; color: #000000 !important; border-color: #fff350; text-shadow: none; }
+        .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
+        .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         
         .cell-x { 
-            width: 23%;
-            height: 85px;
+            height: 100%;
+            min-height: 75px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 16px; 
+            font-size: 19px; 
             font-weight: bold; 
             color: #ff5252 !important; 
+            width: 100%;
             box-sizing: border-box;
+            -webkit-appearance: none;
+            appearance: none;
         }
 
-        /* Контейнер регулировки с отображением текущего значения посередине */
+        /* Контейнер регулировки штрафа для режима редактирования */
         .penalty-edit-container {
-            width: 23%;
-            height: 85px;
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            align-items: center;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            height: 100%;
+            width: 100%;
             box-sizing: border-box;
         }
 
         .penalty-edit-btn {
-            width: 100%;
-            height: 28px;
+            height: 100%;
+            min-height: 75px;
             border: 2px solid #ff69b4;
-            border-radius: 8px;
-            font-size: 16px;
+            border-radius: 12px;
+            font-size: 24px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
             justify-content: center;
             align-items: center;
-            color: #fff;
-            outline: none;
-            -webkit-tap-highlight-color: transparent;
+            -webkit-appearance: none;
         }
-        .btn-inc { background-color: #2e7d32; }
-        .btn-dec { background-color: #c62828; }
+        .btn-inc { background-color: #2e7d32; color: #fff; }
+        .btn-dec { background-color: #c62828; color: #fff; }
 
-        .penalty-edit-value {
-            font-size: 14px;
-            font-weight: bold;
-            color: #ff69b4;
-            text-align: center;
-            line-height: 20px;
-        }
-
+        /* Нижняя панель управления системными кнопками */
         .bottom-bar {
-            flex: 0 0 auto;
             display: flex;
             justify-content: space-between;
             align-items: center;
             width: 100%;
-            padding: 10px 0;
+            padding: 15px 10px 5px 10px;
             box-sizing: border-box;
         }
 
+        /* Кнопка Администратора "А" */
         .admin-trigger-btn {
-            width: 40px;
-            height: 40px;
+            width: 36px;
+            height: 36px;
             border-radius: 50%;
             border: 2px solid #444454;
             background-color: #2b2b36;
@@ -217,29 +232,35 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: center;
             align-items: center;
-            outline: none;
-            -webkit-tap-highlight-color: transparent;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
         }
 
         .admin-trigger-btn.admin-active {
             background-color: #1b5e20;
             border-color: #4caf50;
             color: #fff;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
         }
 
         .log-trigger-btn {
             background: none;
             border: none;
             color: #4a4a5a;
-            font-size: 14px;
+            font-size: 13px;
             text-decoration: underline;
             cursor: pointer;
+            padding: 5px 10px;
+            -webkit-appearance: none;
         }
+        
+        .log-trigger-btn:active { color: #8a8a9a; }
 
+        /* Модальные окна */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0; left: 0; width: 100%; height: 100%;
+            top: 0; left: 0; width: 100vw; height: 100vh;
             background-color: rgba(0,0,0,0.85);
             z-index: 1000;
             justify-content: center;
@@ -254,9 +275,10 @@ HTML_TEMPLATE = """
             border-radius: 16px;
             width: 100%;
             max-width: 450px;
-            height: 70vh;
+            height: 75vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         }
 
         .modal-header {
@@ -275,6 +297,8 @@ HTML_TEMPLATE = """
             color: #fff;
             border-radius: 8px;
             padding: 6px 14px;
+            cursor: pointer;
+            font-size: 14px;
         }
 
         .log-content {
@@ -282,11 +306,15 @@ HTML_TEMPLATE = """
             padding: 15px;
             overflow-y: auto;
             font-family: monospace;
-            font-size: 13px;
+            font-size: 12px;
+            line-height: 1.5;
             color: #d1d1d6;
             white-space: pre-wrap;
+            -webkit-user-select: text;
+            user-select: text;
         }
 
+        /* Окно ввода пароля */
         .auth-window {
             background-color: #1e1e24;
             border: 2px solid #3d3d4e;
@@ -295,14 +323,15 @@ HTML_TEMPLATE = """
             padding: 20px;
             display: flex;
             flex-direction: column;
+            gap: 15px;
             align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
 
         .auth-title {
             font-size: 18px;
             font-weight: bold;
             color: #a0a0ab;
-            margin-bottom: 15px;
         }
 
         .auth-input {
@@ -314,12 +343,18 @@ HTML_TEMPLATE = """
             color: #fff;
             font-size: 22px;
             text-align: center;
-            margin-bottom: 15px;
+            letter-spacing: 6px;
+            box-sizing: border-box;
             outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: #4caf50;
         }
 
         .auth-buttons {
             display: flex;
+            gap: 10px;
             width: 100%;
         }
 
@@ -329,59 +364,18 @@ HTML_TEMPLATE = """
             border-radius: 8px;
             border: none;
             font-weight: bold;
+            cursor: pointer;
             font-size: 14px;
-            color: white;
-            margin: 0 5px;
         }
-        .auth-confirm { background-color: #4caf50; }
-        .auth-cancel { background-color: #3d3d4e; }
+        .auth-confirm { background-color: #4caf50; color: white; }
+        .auth-cancel { background-color: #3d3d4e; color: white; }
     </style>
 </head>
 <body>
-<div class="container">
-    <div class="main-content">
+<div class="container" pointerdown="initAudio()">
+    <div>
         <h2>ЧУПРА</h2>
-        <div class="cards-wrapper">
-            
-            <!-- КАРТОЧКА ERIK -->
-            <div id="card_ERIK" class="user-card">
-                <button id="name_ERIK" class="name-btn">ERIK</button>
-                <div class="controls-row">
-                    <button id="sq_ERIK_0" class="square"><span>1</span><strong id="t_ERIK_0"></strong></button>
-                    <button id="sq_ERIK_1" class="square"><span>2</span><strong id="t_ERIK_1"></strong></button>
-                    <button id="sq_ERIK_2" class="square"><span>3</span><strong id="t_ERIK_2"></strong></button>
-                    
-                    <!-- Блок отображения штрафа в обычном режиме -->
-                    <div id="p_view_ERIK" class="cell-x">0m</div>
-                    
-                    <!-- Блок изменения штрафа (режим А) с внутренним индикатором времени -->
-                    <div id="p_edit_ERIK" class="penalty-edit-container" style="display:none;">
-                        <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('ERIK', 'inc')">+</button>
-                        <div id="p_val_ERIK" class="penalty-edit-value">0m</div>
-                        <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('ERIK', 'dec')">-</button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- КАРТОЧКА NICK -->
-            <div id="card_NICK" class="user-card">
-                <button id="name_NICK" class="name-btn">NICK</button>
-                <div class="controls-row">
-                    <button id="sq_NICK_0" class="square"><span>1</span><strong id="t_NICK_0"></strong></button>
-                    <button id="sq_NICK_1" class="square"><span>2</span><strong id="t_NICK_1"></strong></button>
-                    <button id="sq_NICK_2" class="square"><span>3</span><strong id="t_NICK_2"></strong></button>
-                    
-                    <div id="p_view_NICK" class="cell-x">0m</div>
-                    
-                    <div id="p_edit_NICK" class="penalty-edit-container" style="display:none;">
-                        <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('NICK', 'inc')">+</button>
-                        <div id="p_val_NICK" class="penalty-edit-value">0m</div>
-                        <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('NICK', 'dec')">-</button>
-                    </div>
-                </div>
-            </div>
-
-        </div>
+        <div class="cards-wrapper" id="table-content"></div>
     </div>
     
     <div class="bottom-bar">
@@ -390,7 +384,7 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Модальные окна -->
+<!-- Модальное окно истории -->
 <div class="modal-overlay" id="logOverlay" onclick="closeModal('logOverlay', event)">
     <div class="log-window" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -401,28 +395,28 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
+<!-- Модальное окно авторизации А-режима -->
 <div class="modal-overlay" id="authOverlay" onclick="closeModal('authOverlay', event)">
     <div class="auth-window" onclick="event.stopPropagation()">
         <div class="auth-title">Вход в режим "А"</div>
         <input type="password" class="auth-input" id="authPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••">
         <div class="auth-buttons">
-            <button class="auth-btn auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
+            <button class="auth-btn class auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
             <button class="auth-btn auth-confirm" onclick="submitAuth()">Войти</button>
         </div>
     </div>
 </div>
 
 <script>
-    var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    var wsUrl = protocol + window.location.host + '/ws';
-    var socket;
-    var audioCtx = null;
-    var pressTimer = null;
-    var isLongPressTriggered = false;
+    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    const wsUrl = protocol + window.location.host + '/ws';
+    let socket;
+    let audioCtx = null;
+    let pressTimer = null;
     
-    var lastClickTime = 0;
-    var CLICK_DEBOUNCE_MS = 300;
-    var clientIsAdmin = false;
+    let lastClickTime = 0;
+    const CLICK_DEBOUNCE_MS = 300;
+    let clientIsAdmin = false; // Локальный статус админа для отрисовки
 
     function initAudio() {
         if (!audioCtx) {
@@ -437,8 +431,8 @@ HTML_TEMPLATE = """
         initAudio();
         if (!audioCtx) return;
         try {
-            var oscillator = audioCtx.createOscillator();
-            var gainNode = audioCtx.createGain();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
             gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
@@ -447,99 +441,33 @@ HTML_TEMPLATE = """
             gainNode.connect(audioCtx.destination);
             oscillator.start();
             oscillator.stop(audioCtx.currentTime + 0.2);
-        } catch (e) {}
+        } catch (e) { console.log(e); }
     }
 
     function formatTime(seconds) {
         if (seconds <= 0) return "";
-        var m = Math.floor(seconds / 60);
-        var s = seconds % 60;
-        return m + "m" + s + "s";
+        const m = Math.floor(seconds / 60);
+        const s = seconds % 60;
+        return `${m}m${s}s`;
     }
 
     function formatPenalty(minutes) {
         if (minutes === 0) return "0m";
-        var h = Math.floor(minutes / 60);
-        var m = minutes % 60;
-        if (h > 0) return "-" + h + "h" + m + "m";
-        return "-" + m + "m";
-    }
-
-    function bindEvents(name) {
-        var btn = document.getElementById("name_" + name);
-        if (!btn) return;
-
-        var startHandler = function(e) {
-            if (!clientIsAdmin) return;
-            initAudio();
-            isLongPressTriggered = false;
-            
-            if (pressTimer) clearTimeout(pressTimer);
-            
-            pressTimer = setTimeout(function() {
-                sendAction({ "action": "long_press", "name": name });
-                isLongPressTriggered = true;
-                pressTimer = null;
-            }, 3000); 
-        };
-
-        var endHandler = function(e) {
-            if (!clientIsAdmin) return;
-            if (pressTimer) {
-                clearTimeout(pressTimer);
-                pressTimer = null;
-            }
-            if (!isLongPressTriggered) {
-                var currentTime = new Date().getTime();
-                if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
-                    sendAction({ "action": "click", "name": name });
-                    lastClickTime = currentTime;
-                }
-            }
-            isLongPressTriggered = false;
-        };
-
-        var cancelHandler = function() {
-            if (pressTimer) {
-                clearTimeout(pressTimer);
-                pressTimer = null;
-            }
-        };
-
-        btn.ontouchstart = startHandler;
-        btn.ontouchend = endHandler;
-        btn.ontouchcancel = cancelHandler;
-
-        btn.onmousedown = startHandler;
-        btn.onmouseup = endHandler;
-        btn.onmouseout = cancelHandler;
-
-        for (var i = 0; i < 3; i++) {
-            (function(idx) {
-                var sq = document.getElementById("sq_" + name + "_" + idx);
-                sq.onclick = function() {
-                    if (!clientIsAdmin) return;
-                    var cardData = window.lastData ? window.lastData[name] : null;
-                    if (cardData && cardData.edit_mode) {
-                        var currentTime = new Date().getTime();
-                        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
-                        lastClickTime = currentTime;
-                        sendAction({ "action": "cancel_element", "name": name, "element": idx });
-                    }
-                };
-            })(i);
-        }
+        const h = Math.floor(minutes / 60);
+        const m = minutes % 60;
+        if (h > 0) return `-${h}h${m}m`;
+        return `-${m}m`;
     }
 
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            var response = JSON.parse(event.data);
+            const response = JSON.parse(event.data);
             if (response.play_sound) playBeep();
             
-            if (response.is_admin !== undefined) {
+            if (response.hasOwnProperty("is_admin")) {
                 clientIsAdmin = response.is_admin;
-                var btn = document.getElementById("adminBtn");
+                const btn = document.getElementById("adminBtn");
                 if (clientIsAdmin) {
                     btn.classList.add("admin-active");
                 } else {
@@ -547,53 +475,108 @@ HTML_TEMPLATE = """
                 }
             }
             
-            if (response.data) {
-                window.lastData = response.data;
-                updateChildUI("ERIK", response.data["ERIK"]);
-                updateChildUI("NICK", response.data["NICK"]);
-            }
+            if (response.data) renderTable(response.data);
             if (response.logs) renderLogs(response.logs);
         };
         socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
-    function updateChildUI(name, info) {
-        if (!info) return;
-
-        var card = document.getElementById("card_" + name);
-        var nameBtn = document.getElementById("name_" + name);
+    function renderTable(data) {
+        const container = document.getElementById('table-content');
+        if (!container) return;
         
-        if (info.edit_mode) {
-            card.classList.add("edit-active");
-            nameBtn.innerHTML = name + " ⚙";
-        } else {
-            card.classList.remove("edit-active");
-            nameBtn.innerHTML = name;
-        }
+        let html = "";
+        for (const [name, info] of Object.entries(data)) {
+            const editClass = info.edit_mode ? "edit-active" : "";
+            const isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
+            const nameDisabled = clientIsAdmin ? "" : "disabled";
 
-        for (var i = 0; i < 3; i++) {
-            var sq = document.getElementById("sq_" + name + "_" + i);
-            var tNode = document.getElementById("t_" + name + "_" + i);
-            sq.className = "square " + info.squares[i];
-            tNode.innerHTML = formatTime(info.timers[i]);
-        }
+            // Генерируем блок штрафа: либо обычная ячейка, либо +/- в режиме редактирования
+            let penaltyBlockHtml = "";
+            if (info.edit_mode && clientIsAdmin) {
+                penaltyBlockHtml = `
+                <div class="penalty-edit-container">
+                    <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('${name}', 'inc')">+</button>
+                    <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('${name}', 'dec')">-</button>
+                </div>`;
+            } else {
+                penaltyBlockHtml = `
+                <button class="cell-x" disabled>
+                    ${formatPenalty(info.penalty_minutes)}
+                </button>`;
+            }
 
-        var pView = document.getElementById("p_view_" + name);
-        var pEdit = document.getElementById("p_edit_" + name);
-        var pVal = document.getElementById("p_val_" + name);
+            html += `
+            <div class="user-card ${editClass}">
+                <button class="name-btn" ${nameDisabled}
+                        onpointerdown="startPress(event, '${name}')" 
+                        onpointerup="endPress(event, '${name}')" 
+                        onpointerleave="cancelPress()">
+                    ${name}${info.edit_mode ? " ⚙" : ""}
+                </button>
+                <div class="controls-row">
+                    <button class="square ${info.squares[0]}" ${isClickable} onclick="clickElement('${name}', 0)">
+                        <span>1</span><strong>${formatTime(info.timers[0])}</strong>
+                    </button>
+                    <button class="square ${info.squares[1]}" ${isClickable} onclick="clickElement('${name}', 1)">
+                        <span>2</span><strong>${formatTime(info.timers[1])}</strong>
+                    </button>
+                    <button class="square ${info.squares[2]}" ${isClickable} onclick="clickElement('${name}', 2)">
+                        <span>3</span><strong>${formatTime(info.timers[2])}</strong>
+                    </button>
+                    ${penaltyBlockHtml}
+                </div>
+            </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    function startPress(e, name) {
+        if (!clientIsAdmin) return;
+        e.preventDefault();
+        initAudio();
+        cancelPress();
         
-        var penaltyText = formatPenalty(info.penalty_minutes);
+        const currentTime = new Date().getTime();
+        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
 
-        if (info.edit_mode && clientIsAdmin) {
-            pView.style.display = "none";
-            // Записываем актуальный штраф во внутренний текстовый блок пульта управления
-            pVal.innerHTML = penaltyText; 
-            pEdit.style.display = "flex";
-        } else {
-            pView.innerHTML = penaltyText;
-            pView.style.display = "flex";
-            pEdit.style.display = "none";
+        pressTimer = setTimeout(() => {
+            sendAction({ "action": "long_press", "name": name });
+            pressTimer = null;
+            lastClickTime = new Date().getTime();
+        }, 3000); 
+    }
+
+    function endPress(e, name) {
+        if (!clientIsAdmin) return;
+        e.preventDefault();
+        const currentTime = new Date().getTime();
+        
+        if (pressTimer !== null) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+            
+            if (currentTime - lastClickTime > CLICK_DEBOUNCE_MS) {
+                sendAction({ "action": "click", "name": name });
+                lastClickTime = currentTime;
+            }
         }
+    }
+
+    function cancelPress() {
+        if (pressTimer !== null) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+        }
+    }
+
+    function clickElement(name, elementIdx) {
+        if (!clientIsAdmin) return;
+        const currentTime = new Date().getTime();
+        if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
+        lastClickTime = currentTime;
+        
+        sendAction({ "action": "cancel_element", "name": name, "element": elementIdx });
     }
 
     function modifyPenalty(name, operation) {
@@ -603,6 +586,7 @@ HTML_TEMPLATE = """
 
     function clickAdminButton() {
         if (clientIsAdmin) {
+            // Если уже админ — выходим без запроса пароля
             sendAction({ "action": "admin_logout" });
         } else {
             document.getElementById("authPin").value = "";
@@ -612,7 +596,7 @@ HTML_TEMPLATE = """
     }
 
     function submitAuth() {
-        var pin = document.getElementById("authPin").value;
+        const pin = document.getElementById("authPin").value;
         if (pin.length === 4) {
             sendAction({ "action": "admin_login", "password": pin });
             document.getElementById("authOverlay").style.display = "none";
@@ -631,9 +615,9 @@ HTML_TEMPLATE = """
     }
 
     function renderLogs(logsList) {
-        var content = document.getElementById('logContent');
+        const content = document.getElementById('logContent');
         if (content) {
-            content.textContent = logsList.length > 0 ? logsList.slice().reverse().join('\\n') : "История пуста.";
+            content.textContent = logsList.length > 0 ? logsList.reverse().join('\\n') : "История пуста.";
         }
     }
 
@@ -643,9 +627,6 @@ HTML_TEMPLATE = """
         }
     }
 
-    bindEvents("ERIK");
-    bindEvents("NICK");
-    
     connect();
 </script>
 </body>
@@ -676,6 +657,7 @@ def handle_click(name: str):
         add_log(f"Для {name} активировано 3-е предупреждение (Красный квадрат).")
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
+        # Новая логика: время в предыдущем (3-м) кубике снова становится 20 минут
         child["timers"][2] = TIMER_DURATION
         add_log(f"Для {name} добавлено +20 минут штрафа. Время 3-го кубика возвращено на 20 мин. Всего штрафа: {child['penalty_minutes']}м.")
 
@@ -735,6 +717,7 @@ async def tick_processing():
 
 async def broadcast_state(play_sound: bool = False):
     if ACTIVE_CONNECTIONS:
+        # Каждому клиенту шлем общие данные + его личный статус админа
         for ws, client_info in list(ACTIVE_CONNECTIONS.items()):
             payload = {
                 "data": CHILDREN_DATA,
@@ -755,8 +738,10 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
+    # Регистрируем устройство на сервере со статусом "не админ" по умолчанию
     ACTIVE_CONNECTIONS[websocket] = {"id": str(uuid.uuid4()), "is_admin": False}
     
+    # Первичный пакет данных для подключившегося устройства
     await websocket.send_json({
         "data": CHILDREN_DATA, 
         "play_sound": False, 
@@ -770,9 +755,11 @@ async def websocket_endpoint(websocket: WebSocket):
             action = data.get("action")
             name = data.get("name")
             
+            # Проверяем, авторизован ли текущий клиент как администратор
             client_info = ACTIVE_CONNECTIONS.get(websocket, {"is_admin": False})
             is_client_admin = client_info["is_admin"]
             
+            # Действия авторизации (доступны всем)
             if action == "admin_login":
                 password = data.get("password")
                 if password == ADMIN_PASSWORD:
@@ -791,6 +778,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"logs": SYSTEM_LOGS})
                 continue
 
+            # Защищенные действия (требуют прав "А" на этом устройстве)
             if not is_client_admin:
                 continue
 
