@@ -158,7 +158,7 @@ def handle_click(name: str):
         child["squares"][2] = "red"
         child["timers"][2] = TIMER_DURATION
     elif squares[2] == "red":
-        child["penalty_minutes"] += 20
+        child["penalty_minutes"] += 1
 
 async def tick_processing():
     while True:
