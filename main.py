@@ -121,7 +121,7 @@ HTML_TEMPLATE = """
         
         .square { 
             width: 23%;
-            height: 75px;
+            height: 85px;
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
@@ -144,7 +144,7 @@ HTML_TEMPLATE = """
         
         .cell-x { 
             width: 23%;
-            height: 75px;
+            height: 85px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
@@ -157,27 +157,23 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
 
-        /* Обновленный контейнер: теперь он объединяет кнопки и вывод цифры внутри рамки */
+        /* Контейнер регулировки с отображением текущего значения посередине */
         .penalty-edit-container {
             width: 23%;
-            height: 75px;
-            background-color: #141419 !important; 
-            border: 3px solid #ff69b4; 
-            border-radius: 14px;
+            height: 85px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
             align-items: center;
             box-sizing: border-box;
-            padding: 2px;
         }
 
         .penalty-edit-btn {
             width: 100%;
-            height: 22px;
-            border: none;
-            border-radius: 6px;
-            font-size: 14px;
+            height: 28px;
+            border: 2px solid #ff69b4;
+            border-radius: 8px;
+            font-size: 16px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
@@ -194,7 +190,8 @@ HTML_TEMPLATE = """
             font-size: 14px;
             font-weight: bold;
             color: #ff69b4;
-            line-height: 19px;
+            text-align: center;
+            line-height: 20px;
         }
 
         .bottom-bar {
@@ -357,10 +354,10 @@ HTML_TEMPLATE = """
                     <!-- Блок отображения штрафа в обычном режиме -->
                     <div id="p_view_ERIK" class="cell-x">0m</div>
                     
-                    <!-- Блок изменения штрафа (в режиме А цифра зажата между кнопками) -->
+                    <!-- Блок изменения штрафа (режим А) с внутренним индикатором времени -->
                     <div id="p_edit_ERIK" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('ERIK', 'inc')">+</button>
-                        <div id="p_edit_val_ERIK" class="penalty-edit-value">0m</div>
+                        <div id="p_val_ERIK" class="penalty-edit-value">0m</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('ERIK', 'dec')">-</button>
                     </div>
                 </div>
@@ -378,7 +375,7 @@ HTML_TEMPLATE = """
                     
                     <div id="p_edit_NICK" class="penalty-edit-container" style="display:none;">
                         <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('NICK', 'inc')">+</button>
-                        <div id="p_edit_val_NICK" class="penalty-edit-value">0m</div>
+                        <div id="p_val_NICK" class="penalty-edit-value">0m</div>
                         <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('NICK', 'dec')">-</button>
                     </div>
                 </div>
@@ -583,16 +580,17 @@ HTML_TEMPLATE = """
 
         var pView = document.getElementById("p_view_" + name);
         var pEdit = document.getElementById("p_edit_" + name);
-        var pEditVal = document.getElementById("p_edit_val_" + name);
-
-        var formattedPenaltyText = formatPenalty(info.penalty_minutes);
+        var pVal = document.getElementById("p_val_" + name);
+        
+        var penaltyText = formatPenalty(info.penalty_minutes);
 
         if (info.edit_mode && clientIsAdmin) {
             pView.style.display = "none";
-            pEditVal.innerHTML = formattedPenaltyText; // Выводим актуальное время в поле редактирования
+            // Записываем актуальный штраф во внутренний текстовый блок пульта управления
+            pVal.innerHTML = penaltyText; 
             pEdit.style.display = "flex";
         } else {
-            pView.innerHTML = formattedPenaltyText;
+            pView.innerHTML = penaltyText;
             pView.style.display = "flex";
             pEdit.style.display = "none";
         }
@@ -647,6 +645,7 @@ HTML_TEMPLATE = """
 
     bindEvents("ERIK");
     bindEvents("NICK");
+    
     connect();
 </script>
 </body>
@@ -705,12 +704,11 @@ def handle_modify_penalty(name: str, operation: str):
             child["penalty_minutes"] -= 20
             add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
-# Таймаут изменен с 5 на 15 секунд
 async def auto_disable_edit_mode(name: str):
-    await asyncio.sleep(15)
+    await asyncio.sleep(5)
     if CHILDREN_DATA[name]["edit_mode"]:
         CHILDREN_DATA[name]["edit_mode"] = False
-        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту (15с).")
+        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту.")
         await broadcast_state(play_sound=False)
 
 async def tick_processing():
