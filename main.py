@@ -133,7 +133,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>Мониторинг Наказаний</h2>
+    <h2>Монитор</h2>
     <div class="table" id="table-content">Синхронизация с сервером...</div>
 </div>
 
