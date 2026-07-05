@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "3003"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
@@ -40,7 +40,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Панель Контроля Времени</title>
+    <title>ЧУПРА</title>
     <style>
         html, body {
             height: 100%;
@@ -72,8 +72,9 @@ HTML_TEMPLATE = """
             text-align: center; 
             color: #a0a0ab; 
             margin: 0 0 20px 0; 
-            font-size: 28px;
-            font-weight: bold;
+            font-size: 32px;
+            font-weight: 900;
+            letter-spacing: 2px;
         }
         
         .cards-wrapper { 
@@ -102,7 +103,7 @@ HTML_TEMPLATE = """
             border: 3px solid #444454; 
             padding: 16px; 
             border-radius: 14px; 
-            font-size: 28px; /* Увеличили размер шрифта имени */
+            font-size: 28px; 
             font-weight: 900; 
             cursor: pointer; 
             width: 100%;
@@ -123,26 +124,31 @@ HTML_TEMPLATE = """
         
         .square { 
             width: 23%;
-            height: 90px; /* Немного увеличили высоту под крупные шрифты */
+            height: 90px; 
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
             justify-content: center; 
             align-items: center; 
-            font-size: 18px; /* Увеличили номер кубика */
-            font-weight: 900; 
             border: 3px solid #444454;
             box-sizing: border-box;
             background-color: #3d3d4e;
             color: #ffffff;
             outline: none;
             -webkit-tap-highlight-color: transparent;
+            padding: 2px 0;
+        }
+
+        .square span {
+            font-size: 52px; /* Максимальный размер цифры кубика */
+            font-weight: 900;
+            line-height: 1;
         }
 
         .square strong {
-            font-size: 13px; /* Увеличили размер шрифта таймера внутри кубика */
+            font-size: 12px; 
             font-weight: bold;
-            margin-top: 4px;
+            margin-top: -2px;
             display: block;
         }
         
@@ -160,10 +166,11 @@ HTML_TEMPLATE = """
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 22px; /* Увеличили размер обычного текста штрафа */
+            font-size: 42px; /* Огромный шрифт штрафа на всю ячейку */
             font-weight: 900; 
             color: #ff5252 !important; 
             box-sizing: border-box;
+            line-height: 90px;
         }
 
         /* Контейнер регулировки штрафа */
@@ -180,10 +187,10 @@ HTML_TEMPLATE = """
 
         .penalty-edit-btn {
             width: 100%;
-            height: 24px;
+            height: 22px;
             border: 2px solid #ff69b4;
             border-radius: 6px;
-            font-size: 18px; /* Крупнее символы плюс и минус */
+            font-size: 18px; 
             font-weight: 900;
             cursor: pointer;
             display: flex;
@@ -197,11 +204,12 @@ HTML_TEMPLATE = """
         .btn-dec { background-color: #c62828; }
 
         .penalty-edit-value {
-            font-size: 20px; /* Крупный и заметный шрифт штрафа при редактировании */
+            font-size: 42px; /* Огромный шрифт штрафа при редактировании */
             font-weight: 900; 
             color: #ff69b4;
             text-align: center;
-            line-height: 24px;
+            height: 42px;
+            line-height: 42px;
             flex-grow: 1;
             display: flex;
             align-items: center;
@@ -356,7 +364,7 @@ HTML_TEMPLATE = """
 <body>
 <div class="container">
     <div class="main-content">
-        <h2>Ч У П Р А</h2>
+        <h2>ЧУПРА</h2>
         <div class="cards-wrapper">
             
             <!-- КАРТОЧКА ERIC -->
@@ -455,7 +463,6 @@ HTML_TEMPLATE = """
         try {
             var t = audioCtx.currentTime;
             
-            // Первая нота: пониже (330 Гц), короткая
             var osc1 = audioCtx.createOscillator();
             var gain1 = audioCtx.createGain();
             osc1.type = 'sine';
@@ -467,7 +474,6 @@ HTML_TEMPLATE = """
             osc1.start(t);
             osc1.stop(t + 0.12);
 
-            // Вторая нота: чуть выше (440 Гц), идет сразу следом
             var osc2 = audioCtx.createOscillator();
             var gain2 = audioCtx.createGain();
             osc2.type = 'sine';
@@ -750,7 +756,7 @@ async def tick_processing():
                 child["timers"][2] -= 1
                 if child["timers"][2] == 0:
                     child["squares"][2] = "gray"
-                    add_log(f"Время действия 3-го предупреждения (Красный квадрат) у {name}停ко.")
+                    add_log(f"Время действия 3-го предупреждения (Красный квадрат) у {name} истекло.")
             elif child["timers"][1] > 0:
                 child["timers"][1] -= 1
                 if child["timers"][1] == 0:
@@ -780,7 +786,7 @@ async def broadcast_state(play_sound: bool = False):
 
 @app.on_event("startup")
 async def startup_event():
-    add_log("Система контроля времени успешно запущена.")
+    add_log("Система ЧУПРА успешно запущена.")
     asyncio.create_task(tick_processing())
 
 @app.websocket("/ws")
