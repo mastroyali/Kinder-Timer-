@@ -7,7 +7,7 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-ADMIN_PASSWORD = "3003"
+ADMIN_PASSWORD = "1234"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
@@ -72,7 +72,8 @@ HTML_TEMPLATE = """
             text-align: center; 
             color: #a0a0ab; 
             margin: 0 0 20px 0; 
-            font-size: 26px;
+            font-size: 28px;
+            font-weight: bold;
         }
         
         .cards-wrapper { 
@@ -98,17 +99,18 @@ HTML_TEMPLATE = """
         .name-btn { 
             background-color: #2b2b36; 
             color: #fff; 
-            border: 2px solid #444454; 
-            padding: 14px; 
+            border: 3px solid #444454; 
+            padding: 16px; 
             border-radius: 14px; 
-            font-size: 24px; 
-            font-weight: bold; 
+            font-size: 28px; /* Увеличили размер шрифта имени */
+            font-weight: 900; 
             cursor: pointer; 
             width: 100%;
             box-sizing: border-box;
             text-align: center;
             outline: none;
             -webkit-tap-highlight-color: transparent;
+            letter-spacing: 1px;
         }
         
         .controls-row {
@@ -121,20 +123,27 @@ HTML_TEMPLATE = """
         
         .square { 
             width: 23%;
-            height: 85px;
+            height: 90px; /* Немного увеличили высоту под крупные шрифты */
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
             justify-content: center; 
             align-items: center; 
-            font-size: 14px; 
-            font-weight: bold; 
+            font-size: 18px; /* Увеличили номер кубика */
+            font-weight: 900; 
             border: 3px solid #444454;
             box-sizing: border-box;
             background-color: #3d3d4e;
             color: #ffffff;
             outline: none;
             -webkit-tap-highlight-color: transparent;
+        }
+
+        .square strong {
+            font-size: 13px; /* Увеличили размер шрифта таймера внутри кубика */
+            font-weight: bold;
+            margin-top: 4px;
+            display: block;
         }
         
         .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
@@ -144,23 +153,23 @@ HTML_TEMPLATE = """
         
         .cell-x { 
             width: 23%;
-            height: 85px;
+            height: 90px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 16px; 
-            font-weight: bold; 
+            font-size: 22px; /* Увеличили размер обычного текста штрафа */
+            font-weight: 900; 
             color: #ff5252 !important; 
             box-sizing: border-box;
         }
 
-        /* Оптимизированный контейнер регулировки штрафа */
+        /* Контейнер регулировки штрафа */
         .penalty-edit-container {
             width: 23%;
-            height: 85px;
+            height: 90px;
             display: flex;
             flex-direction: column;
             justify-content: space-between;
@@ -171,11 +180,11 @@ HTML_TEMPLATE = """
 
         .penalty-edit-btn {
             width: 100%;
-            height: 24px; /* Чуть уменьшили высоту, чтобы дать простор тексту */
-            border: 1.5px solid #ff69b4;
+            height: 24px;
+            border: 2px solid #ff69b4;
             border-radius: 6px;
-            font-size: 16px;
-            font-weight: bold;
+            font-size: 18px; /* Крупнее символы плюс и минус */
+            font-weight: 900;
             cursor: pointer;
             display: flex;
             justify-content: center;
@@ -188,8 +197,8 @@ HTML_TEMPLATE = """
         .btn-dec { background-color: #c62828; }
 
         .penalty-edit-value {
-            font-size: 15px; /* Увеличили шрифт */
-            font-weight: 900; /* Сделали максимально жирным */
+            font-size: 20px; /* Крупный и заметный шрифт штрафа при редактировании */
+            font-weight: 900; 
             color: #ff69b4;
             text-align: center;
             line-height: 24px;
@@ -210,13 +219,13 @@ HTML_TEMPLATE = """
         }
 
         .admin-trigger-btn {
-            width: 40px;
-            height: 40px;
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             border: 2px solid #444454;
             background-color: #2b2b36;
             color: #a0a0ab;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
@@ -236,7 +245,7 @@ HTML_TEMPLATE = """
             background: none;
             border: none;
             color: #4a4a5a;
-            font-size: 14px;
+            font-size: 16px;
             text-decoration: underline;
             cursor: pointer;
         }
@@ -272,6 +281,7 @@ HTML_TEMPLATE = """
             align-items: center;
             font-weight: bold;
             color: #a0a0ab;
+            font-size: 16px;
         }
 
         .modal-close {
@@ -279,7 +289,8 @@ HTML_TEMPLATE = """
             border: none;
             color: #fff;
             border-radius: 8px;
-            padding: 6px 14px;
+            padding: 8px 16px;
+            font-size: 14px;
         }
 
         .log-content {
@@ -287,7 +298,7 @@ HTML_TEMPLATE = """
             padding: 15px;
             overflow-y: auto;
             font-family: monospace;
-            font-size: 13px;
+            font-size: 14px;
             color: #d1d1d6;
             white-space: pre-wrap;
         }
@@ -304,7 +315,7 @@ HTML_TEMPLATE = """
         }
 
         .auth-title {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
             color: #a0a0ab;
             margin-bottom: 15px;
@@ -317,7 +328,7 @@ HTML_TEMPLATE = """
             border-radius: 10px;
             padding: 12px;
             color: #fff;
-            font-size: 22px;
+            font-size: 24px;
             text-align: center;
             margin-bottom: 15px;
             outline: none;
@@ -330,11 +341,11 @@ HTML_TEMPLATE = """
 
         .auth-btn {
             flex: 1;
-            padding: 10px;
+            padding: 12px;
             border-radius: 8px;
             border: none;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 16px;
             color: white;
             margin: 0 5px;
         }
@@ -442,16 +453,32 @@ HTML_TEMPLATE = """
         initAudio();
         if (!audioCtx) return;
         try {
-            var oscillator = audioCtx.createOscillator();
-            var gainNode = audioCtx.createGain();
-            oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-            oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.2);
+            var t = audioCtx.currentTime;
+            
+            // Первая нота: пониже (330 Гц), короткая
+            var osc1 = audioCtx.createOscillator();
+            var gain1 = audioCtx.createGain();
+            osc1.type = 'sine';
+            osc1.frequency.setValueAtTime(330, t);
+            gain1.gain.setValueAtTime(0.1, t);
+            gain1.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+            osc1.connect(gain1);
+            gain1.connect(audioCtx.destination);
+            osc1.start(t);
+            osc1.stop(t + 0.12);
+
+            // Вторая нота: чуть выше (440 Гц), идет сразу следом
+            var osc2 = audioCtx.createOscillator();
+            var gain2 = audioCtx.createGain();
+            osc2.type = 'sine';
+            osc2.frequency.setValueAtTime(440, t + 0.1);
+            gain2.gain.setValueAtTime(0.1, t + 0.1);
+            gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+            osc2.connect(gain2);
+            gain2.connect(audioCtx.destination);
+            osc2.start(t + 0.1);
+            osc2.stop(t + 0.25);
+            
         } catch (e) {}
     }
 
@@ -559,7 +586,7 @@ HTML_TEMPLATE = """
             }
             if (response.logs) renderLogs(response.logs);
         };
-        socket.onclose = function() { setTimeout(connect, 5500); };
+        socket.onclose = function() { setTimeout(connect, 1500); };
     }
 
     function updateChildUI(name, info) {
@@ -709,7 +736,7 @@ def handle_modify_penalty(name: str, operation: str):
             add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
 async def auto_disable_edit_mode(name: str):
-    await asyncio.sleep(25)
+    await asyncio.sleep(15)
     if CHILDREN_DATA[name]["edit_mode"]:
         CHILDREN_DATA[name]["edit_mode"] = False
         add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту.")
@@ -723,7 +750,7 @@ async def tick_processing():
                 child["timers"][2] -= 1
                 if child["timers"][2] == 0:
                     child["squares"][2] = "gray"
-                    add_log(f"Время действия 3-го предупреждения (Красный квадрат) у {name} истекло.")
+                    add_log(f"Время действия 3-го предупреждения (Красный квадрат) у {name}停ко.")
             elif child["timers"][1] > 0:
                 child["timers"][1] -= 1
                 if child["timers"][1] == 0:
