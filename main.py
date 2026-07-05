@@ -1,4 +1,5 @@
 import os
+import json
 import asyncio
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
@@ -193,20 +194,17 @@ HTML_TEMPLATE = """
 
     // 100% Кроссплатформенный JSONP-метод получения данных
     function jsonpRequest(url) {
-        // Удаляем старый тег скрипта, если он остался
         var oldScript = document.getElementById("jsonp-buffer");
         if (oldScript) {
             oldScript.parentNode.removeChild(oldScript);
         }
-        // Создаем новый чистый элемент скрипта
         var script = document.createElement("script");
         script.id = "jsonp-buffer";
-        // Добавляем к URL временную метку, чтобы браузер не кэшировал ответы
         script.src = url + "?ts=" + new Date().getTime();
         document.body.appendChild(script);
     }
 
-    // Эту функцию сервер вызовет автоматически, когда скрипт загрузится
+    // Обработчик ответа от сервера
     window.onServerResponse = function(response) {
         if (response && response.play_sound) {
             playBeep();
@@ -264,28 +262,17 @@ async def get():
 
 @app.get("/api/state")
 async def get_state(ts: str = None):
-    # Сервер отдает данные в виде чистой JavaScript функции, которую браузер выполнит моментально
-    current_sound = "true" if SYSTEM_FLAGS["play_sound"] else "false"
+    current_sound = True if SYSTEM_FLAGS["play_sound"] else False
     SYSTEM_FLAGS["play_sound"] = False
     
-    # Формируем JS-ответ вручную
-    js_code = f"""
-    window.onServerResponse({{
-        "play_sound": {current_sound},
-        "data": {{
-            "ERIK": {{
-                "squares": {CHILDREN_DATA["ERIK"]["squares"]},
-                "timers": {CHILDREN_DATA["ERIK"]["timers"]},
-                "penalty_minutes": {CHILDREN_DATA["ERIK"]["penalty_minutes"]}
-            }},
-            "NICK": {{
-                "squares": {CHILDREN_DATA["NICK"]["squares"]},
-                "timers": {CHILDREN_DATA["NICK"]["timers"]},
-                "penalty_minutes": {CHILDREN_DATA["NICK"]["penalty_minutes"]}
-            }}
-        }}
-    }});
-    """
+    # Формируем структуру ответа
+    response_obj = {
+        "play_sound": current_sound,
+        "data": CHILDREN_DATA
+    }
+    
+    # Преобразуем объект в валидный JSON строку и оборачиваем в функцию обратного вызова
+    js_code = f"window.onServerResponse({json.dumps(response_obj)});"
     return HTMLResponse(content=js_code, media_type="application/javascript")
 
 @app.get("/api/click/{name}")
@@ -294,23 +281,12 @@ async def get_click(name: str, ts: str = None):
         handle_click(name)
         SYSTEM_FLAGS["play_sound"] = True
         
-    js_code = f"""
-    window.onServerResponse({{
-        "play_sound": false,
-        "data": {{
-            "ERIK": {{
-                "squares": {CHILDREN_DATA["ERIK"]["squares"]},
-                "timers": {CHILDREN_DATA["ERIK"]["timers"]},
-                "penalty_minutes": {CHILDREN_DATA["ERIK"]["penalty_minutes"]}
-            }},
-            "NICK": {{
-                "squares": {CHILDREN_DATA["NICK"]["squares"]},
-                "timers": {CHILDREN_DATA["NICK"]["timers"]},
-                "penalty_minutes": {CHILDREN_DATA["NICK"]["penalty_minutes"]}
-            }}
-        }}
-    }});
-    """
+    response_obj = {
+        "play_sound": False,
+        "data": CHILDREN_DATA
+    }
+    
+    js_code = f"window.onServerResponse({json.dumps(response_obj)});"
     return HTMLResponse(content=js_code, media_type="application/javascript")
 
 def handle_click(name: str):
