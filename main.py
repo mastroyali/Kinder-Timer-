@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 app = FastAPI()
 
 CHILDREN_DATA = {
-    "ERIK": {
+    "ERIС": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0
@@ -56,7 +56,7 @@ HTML_TEMPLATE = """
 <body>
 <!-- Добавили принудительную разблокировку звука при любом первом клике по экрану -->
 <div class="container" onclick="initAudio()">
-    <h2>Мониторинг Наказаний</h2>
+    <h2>-= Ч У П Р А =-</h2>
     <div class="table" id="table-content"></div>
 </div>
 <script>
