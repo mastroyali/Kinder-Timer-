@@ -27,6 +27,7 @@ CHILDREN_DATA = {
     }
 }
 
+# Ограничение размера логов в памяти
 SYSTEM_LOGS = []
 
 # Структура для отслеживания активных соединений и их прав
@@ -127,16 +128,21 @@ HTML_TEMPLATE = """
         }
         
         .controls-row {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr) 1.3fr;
-            gap: 10px;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
             width: 100%;
+        }
+
+        .controls-row .square, 
+        .controls-row .cell-x,
+        .controls-row .penalty-edit-container {
+            width: 23%;
+            box-sizing: border-box;
         }
         
         .square { 
             aspect-ratio: 1 / 1;
-            width: 100%;
             border-radius: 14px; 
             display: flex; 
             flex-direction: column;
@@ -144,7 +150,6 @@ HTML_TEMPLATE = """
             align-items: center; 
             font-size: 14px; 
             font-weight: bold; 
-            box-sizing: border-box;
             border: 3px solid #444454;
             -webkit-appearance: none;
             appearance: none;
@@ -165,45 +170,40 @@ HTML_TEMPLATE = """
         .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         
         .cell-x { 
-            height: 100%;
-            min-height: 75px;
+            min-height: 72px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 19px; 
+            font-size: 16px; 
             font-weight: bold; 
             color: #ff5252 !important; 
-            width: 100%;
-            box-sizing: border-box;
             -webkit-appearance: none;
             appearance: none;
         }
 
         /* Контейнер регулировки штрафа для режима редактирования */
         .penalty-edit-container {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 5px;
-            height: 100%;
-            width: 100%;
-            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            min-height: 72px;
         }
 
         .penalty-edit-btn {
-            height: 100%;
-            min-height: 75px;
+            height: 48%;
             border: 2px solid #ff69b4;
-            border-radius: 12px;
-            font-size: 24px;
+            border-radius: 8px;
+            font-size: 18px;
             font-weight: bold;
             cursor: pointer;
             display: flex;
             justify-content: center;
             align-items: center;
             -webkit-appearance: none;
+            appearance: none;
         }
         .btn-inc { background-color: #2e7d32; color: #fff; }
         .btn-dec { background-color: #c62828; color: #fff; }
@@ -234,6 +234,7 @@ HTML_TEMPLATE = """
             align-items: center;
             transition: all 0.3s ease;
             -webkit-appearance: none;
+            appearance: none;
         }
 
         .admin-trigger-btn.admin-active {
@@ -252,6 +253,7 @@ HTML_TEMPLATE = """
             cursor: pointer;
             padding: 5px 10px;
             -webkit-appearance: none;
+            appearance: none;
         }
         
         .log-trigger-btn:active { color: #8a8a9a; }
@@ -401,22 +403,22 @@ HTML_TEMPLATE = """
         <div class="auth-title">Вход в режим "А"</div>
         <input type="password" class="auth-input" id="authPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••">
         <div class="auth-buttons">
-            <button class="auth-btn class auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
+            <button class="auth-btn auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
             <button class="auth-btn auth-confirm" onclick="submitAuth()">Войти</button>
         </div>
     </div>
 </div>
 
 <script>
-    const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    const wsUrl = protocol + window.location.host + '/ws';
-    let socket;
-    let audioCtx = null;
-    let pressTimer = null;
+    var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    var wsUrl = protocol + window.location.host + '/ws';
+    var socket;
+    var audioCtx = null;
+    var pressTimer = null;
     
-    let lastClickTime = 0;
-    const CLICK_DEBOUNCE_MS = 300;
-    let clientIsAdmin = false; // Локальный статус админа для отрисовки
+    var lastClickTime = 0;
+    var CLICK_DEBOUNCE_MS = 300;
+    var clientIsAdmin = false; // Локальный статус админа для отрисовки
 
     function initAudio() {
         if (!audioCtx) {
@@ -431,8 +433,8 @@ HTML_TEMPLATE = """
         initAudio();
         if (!audioCtx) return;
         try {
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
+            var oscillator = audioCtx.createOscillator();
+            var gainNode = audioCtx.createGain();
             oscillator.type = 'sine';
             oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
             gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
@@ -446,28 +448,28 @@ HTML_TEMPLATE = """
 
     function formatTime(seconds) {
         if (seconds <= 0) return "";
-        const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
-        return `${m}m${s}s`;
+        var m = Math.floor(seconds / 60);
+        var s = seconds % 60;
+        return m + "m" + s + "s";
     }
 
     function formatPenalty(minutes) {
         if (minutes === 0) return "0m";
-        const h = Math.floor(minutes / 60);
-        const m = minutes % 60;
-        if (h > 0) return `-${h}h${m}m`;
-        return `-${m}m`;
+        var h = Math.floor(minutes / 60);
+        var m = minutes % 60;
+        if (h > 0) return "-" + h + "h" + m + "m";
+        return "-" + m + "m";
     }
 
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            const response = JSON.parse(event.data);
+            var response = JSON.parse(event.data);
             if (response.play_sound) playBeep();
             
-            if (response.hasOwnProperty("is_admin")) {
+            if (Object.prototype.hasOwnProperty.call(response, "is_admin")) {
                 clientIsAdmin = response.is_admin;
-                const btn = document.getElementById("adminBtn");
+                var btn = document.getElementById("adminBtn");
                 if (clientIsAdmin) {
                     btn.classList.add("admin-active");
                 } else {
@@ -482,51 +484,53 @@ HTML_TEMPLATE = """
     }
 
     function renderTable(data) {
-        const container = document.getElementById('table-content');
+        var container = document.getElementById('table-content');
         if (!container) return;
         
-        let html = "";
-        for (const [name, info] of Object.entries(data)) {
-            const editClass = info.edit_mode ? "edit-active" : "";
-            const isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
-            const nameDisabled = clientIsAdmin ? "" : "disabled";
+        var html = "";
+        var keys = Object.keys(data);
+        
+        for (var i = 0; i < keys.length; i++) {
+            var name = keys[i];
+            var info = data[name];
+            
+            var editClass = info.edit_mode ? "edit-active" : "";
+            var isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
+            var nameDisabled = clientIsAdmin ? "" : "disabled";
 
             // Генерируем блок штрафа: либо обычная ячейка, либо +/- в режиме редактирования
-            let penaltyBlockHtml = "";
+            var penaltyBlockHtml = "";
             if (info.edit_mode && clientIsAdmin) {
-                penaltyBlockHtml = `
-                <div class="penalty-edit-container">
-                    <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('${name}', 'inc')">+</button>
-                    <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('${name}', 'dec')">-</button>
-                </div>`;
+                penaltyBlockHtml = '<div class="penalty-edit-container">' +
+                    '<button class="penalty-edit-btn btn-inc" onclick="modifyPenalty(\'' + name + '\', \'inc\')">+</button>' +
+                    '<button class="penalty-edit-btn btn-dec" onclick="modifyPenalty(\'' + name + '\', \'dec\')">-</button>' +
+                '</div>';
             } else {
-                penaltyBlockHtml = `
-                <button class="cell-x" disabled>
-                    ${formatPenalty(info.penalty_minutes)}
-                </button>`;
+                penaltyBlockHtml = '<button class="cell-x" disabled>' +
+                    formatPenalty(info.penalty_minutes) +
+                '</button>';
             }
 
-            html += `
-            <div class="user-card ${editClass}">
-                <button class="name-btn" ${nameDisabled}
-                        onpointerdown="startPress(event, '${name}')" 
-                        onpointerup="endPress(event, '${name}')" 
-                        onpointerleave="cancelPress()">
-                    ${name}${info.edit_mode ? " ⚙" : ""}
-                </button>
-                <div class="controls-row">
-                    <button class="square ${info.squares[0]}" ${isClickable} onclick="clickElement('${name}', 0)">
-                        <span>1</span><strong>${formatTime(info.timers[0])}</strong>
-                    </button>
-                    <button class="square ${info.squares[1]}" ${isClickable} onclick="clickElement('${name}', 1)">
-                        <span>2</span><strong>${formatTime(info.timers[1])}</strong>
-                    </button>
-                    <button class="square ${info.squares[2]}" ${isClickable} onclick="clickElement('${name}', 2)">
-                        <span>3</span><strong>${formatTime(info.timers[2])}</strong>
-                    </button>
-                    ${penaltyBlockHtml}
-                </div>
-            </div>`;
+            html += '<div class="user-card ' + editClass + '">' +
+                '<button class="name-btn" ' + nameDisabled + ' ' +
+                        'onpointerdown="startPress(event, \'' + name + '\')" ' +
+                        'onpointerup="endPress(event, \'' + name + '\')" ' +
+                        'onpointerleave="cancelPress()">' +
+                    name + (info.edit_mode ? " ⚙" : "") +
+                '</button>' +
+                '<div class="controls-row">' +
+                    '<button class="square ' + info.squares[0] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 0)">' +
+                        '<span>1</span><strong>' + formatTime(info.timers[0]) + '</strong>' +
+                    '</button>' +
+                    '<button class="square ' + info.squares[1] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 1)">' +
+                        '<span>2</span><strong>' + formatTime(info.timers[1]) + '</strong>' +
+                    '</button>' +
+                    '<button class="square ' + info.squares[2] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 2)">' +
+                        '<span>3</span><strong>' + formatTime(info.timers[2]) + '</strong>' +
+                    '</button>' +
+                    penaltyBlockHtml +
+                '</div>' +
+            '</div>';
         }
         container.innerHTML = html;
     }
@@ -537,10 +541,10 @@ HTML_TEMPLATE = """
         initAudio();
         cancelPress();
         
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
 
-        pressTimer = setTimeout(() => {
+        pressTimer = setTimeout(function() {
             sendAction({ "action": "long_press", "name": name });
             pressTimer = null;
             lastClickTime = new Date().getTime();
@@ -550,7 +554,7 @@ HTML_TEMPLATE = """
     function endPress(e, name) {
         if (!clientIsAdmin) return;
         e.preventDefault();
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         
         if (pressTimer !== null) {
             clearTimeout(pressTimer);
@@ -572,7 +576,7 @@ HTML_TEMPLATE = """
 
     function clickElement(name, elementIdx) {
         if (!clientIsAdmin) return;
-        const currentTime = new Date().getTime();
+        var currentTime = new Date().getTime();
         if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
         lastClickTime = currentTime;
         
@@ -586,7 +590,6 @@ HTML_TEMPLATE = """
 
     function clickAdminButton() {
         if (clientIsAdmin) {
-            // Если уже админ — выходим без запроса пароля
             sendAction({ "action": "admin_logout" });
         } else {
             document.getElementById("authPin").value = "";
@@ -596,7 +599,7 @@ HTML_TEMPLATE = """
     }
 
     function submitAuth() {
-        const pin = document.getElementById("authPin").value;
+        var pin = document.getElementById("authPin").value;
         if (pin.length === 4) {
             sendAction({ "action": "admin_login", "password": pin });
             document.getElementById("authOverlay").style.display = "none";
@@ -615,9 +618,9 @@ HTML_TEMPLATE = """
     }
 
     function renderLogs(logsList) {
-        const content = document.getElementById('logContent');
+        var content = document.getElementById('logContent');
         if (content) {
-            content.textContent = logsList.length > 0 ? logsList.reverse().join('\\n') : "История пуста.";
+            content.textContent = logsList.length > 0 ? logsList.slice().reverse().join('\\n') : "История пуста.";
         }
     }
 
@@ -657,7 +660,6 @@ def handle_click(name: str):
         add_log(f"Для {name} активировано 3-е предупреждение (Красный квадрат).")
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
-        # Новая логика: время в предыдущем (3-м) кубике снова становится 20 минут
         child["timers"][2] = TIMER_DURATION
         add_log(f"Для {name} добавлено +20 минут штрафа. Время 3-го кубика возвращено на 20 мин. Всего штрафа: {child['penalty_minutes']}м.")
 
@@ -717,7 +719,6 @@ async def tick_processing():
 
 async def broadcast_state(play_sound: bool = False):
     if ACTIVE_CONNECTIONS:
-        # Каждому клиенту шлем общие данные + его личный статус админа
         for ws, client_info in list(ACTIVE_CONNECTIONS.items()):
             payload = {
                 "data": CHILDREN_DATA,
@@ -738,10 +739,8 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    # Регистрируем устройство на сервере со статусом "не админ" по умолчанию
     ACTIVE_CONNECTIONS[websocket] = {"id": str(uuid.uuid4()), "is_admin": False}
     
-    # Первичный пакет данных для подключившегося устройства
     await websocket.send_json({
         "data": CHILDREN_DATA, 
         "play_sound": False, 
@@ -755,11 +754,9 @@ async def websocket_endpoint(websocket: WebSocket):
             action = data.get("action")
             name = data.get("name")
             
-            # Проверяем, авторизован ли текущий клиент как администратор
             client_info = ACTIVE_CONNECTIONS.get(websocket, {"is_admin": False})
             is_client_admin = client_info["is_admin"]
             
-            # Действия авторизации (доступны всем)
             if action == "admin_login":
                 password = data.get("password")
                 if password == ADMIN_PASSWORD:
@@ -778,7 +775,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json({"logs": SYSTEM_LOGS})
                 continue
 
-            # Защищенные действия (требуют прав "А" на этом устройстве)
             if not is_client_admin:
                 continue
 
