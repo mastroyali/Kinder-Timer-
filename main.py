@@ -1,10 +1,11 @@
 import os
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse
 
 app = FastAPI()
 
+# Базовые данные приложения
 CHILDREN_DATA = {
     "ERIK": {
         "squares": ["gray", "gray", "gray"],
@@ -18,7 +19,11 @@ CHILDREN_DATA = {
     }
 }
 
-active_connections = []
+# Флаг для воспроизведения звука
+SYSTEM_FLAGS = {
+    "play_sound": False
+}
+
 TIMER_DURATION = 20 * 60 
 
 HTML_TEMPLATE = """
@@ -99,7 +104,7 @@ HTML_TEMPLATE = """
         .square { 
             border-radius: 6px; 
             display: block; 
-            height: 50px;
+            height: 50px; 
             line-height: 50px;
             font-size: 11px; 
             font-weight: bold; 
@@ -124,46 +129,15 @@ HTML_TEMPLATE = """
             display: block;
             box-sizing: border-box;
         }
-        #debug-log {
-            margin-top: 20px;
-            padding: 10px;
-            background: #000;
-            color: #0f0;
-            font-family: monospace;
-            font-size: 12px;
-            border-radius: 5px;
-            max-height: 150px;
-            overflow-y: auto;
-        }
     </style>
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>Ч У П Р А</h2>
-    <div class="table" id="table-content">Ожидание данных...</div>
-    <div id="debug-log">Лог отладки для iPad: Система запущена...</div>
+    <h2>ЧУПРА</h2>
+    <div class="table" id="table-content">Синхронизация с сервером...</div>
 </div>
 
 <script>
-    // Функция логирования прямо на экран старого iPad
-    function logDebug(msg) {
-        var logDiv = document.getElementById('debug-log');
-        if (logDiv) {
-            logDiv.innerHTML += '<br/>' + msg;
-        }
-    }
-
-    // Безопасное определение URL вебсокета
-    var wsUrl = "";
-    try {
-        var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-        wsUrl = protocol + window.location.host + '/ws';
-        logDebug("WS URL определен: " + wsUrl);
-    } catch(e) {
-        logDebug("Ошибка определения URL: " + e.message);
-    }
-
-    var socket = null;
     var audioCtx = null;
 
     function initAudio() {
@@ -175,9 +149,8 @@ HTML_TEMPLATE = """
                 source.buffer = buffer;
                 source.connect(audioCtx.destination);
                 if (source.start) { source.start(0); } else if (source.noteOn) { source.noteOn(0); }
-                logDebug("Аудио инициализировано");
             } catch (e) {
-                logDebug("Ошибка аудио: " + e.message);
+                console.log("Audio Error", e);
             }
         }
     }
@@ -197,7 +170,7 @@ HTML_TEMPLATE = """
             if (oscillator.start) { oscillator.start(0); } else if (oscillator.noteOn) { oscillator.noteOn(0); }
             if (oscillator.stop) { oscillator.stop(audioCtx.currentTime + 0.2); } else if (oscillator.noteOff) { oscillator.noteOff(audioCtx.currentTime + 0.2); }
         } catch (e) {
-            logDebug("Ошибка воспроизведения: " + e.message);
+            console.log("Play Error", e);
         }
     }
 
@@ -219,93 +192,70 @@ HTML_TEMPLATE = """
         return "-" + m + "m";
     }
 
-    function connect() {
-        try {
-            logDebug("Попытка подключения к WebSocket...");
-            // Проверка поддержки WebSocket старым браузером
-            var WSObj = window.WebSocket || window.MozWebSocket;
-            if (!WSObj) {
-                logDebug("Критическая ошибка: Браузер не поддерживает WebSocket!");
-                return;
-            }
-            
-            socket = new WSObj(wsUrl);
-            
-            socket.onopen = function() {
-                logDebug("WebSocket соединение успешно установлено!");
-            };
-
-            socket.onmessage = function(event) {
+    // Классический AJAX-запрос, работающий на любой версии iOS
+    function apiRequest(url, method, data, callback) {
+        var xhr = new XMLHttpRequest();
+        xhr.open(method, url, true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState === 4 && xhr.status === 200) {
                 try {
-                    var response = JSON.parse(event.data);
-                    if (response.play_sound) {
-                        playBeep();
-                    }
-                    renderTable(response.data);
-                } catch(err) {
-                    logDebug("Ошибка обработки сообщения: " + err.message);
+                    var response = JSON.parse(xhr.responseText);
+                    if (callback) callback(response);
+                } catch (e) {
+                    console.log("JSON Parse Error");
                 }
-            };
+            }
+        };
+        xhr.send(data ? JSON.stringify(data) : null);
+    }
 
-            socket.onclose = function() { 
-                logDebug("Соединение закрыто. Реконнект через 2 сек...");
-                setTimeout(connect, 2000); 
-            };
-
-            socket.onerror = function(err) {
-                logDebug("Ошибка WebSocket-соединения.");
-            };
-
-        } catch(e) {
-            logDebug("Ошибка в блоке connect: " + e.message);
-        }
+    // Регулярное обновление данных (раз в 1 секунду)
+    function updateData() {
+        apiRequest("/api/state", "GET", null, function(response) {
+            if (response.play_sound) {
+                playBeep();
+            }
+            renderTable(response.data);
+        });
     }
 
     function renderTable(data) {
         var container = document.getElementById('table-content');
         if (!container) return;
         
-        try {
-            var html = '<div class="row header">' +
-                       '<div class="cell cell-name">Имя</div>' +
-                       '<div class="cell cell-square">1</div>' +
-                       '<div class="cell cell-square">2</div>' +
-                       '<div class="cell cell-square">3</div>' +
-                       '<div class="cell cell-penalty">Ячейка Х</div>' +
-                       '</div>';
-                       
-            for (var name in data) {
-                if (data.hasOwnProperty(name)) {
-                    var info = data[name];
-                    html += '<div class="row row-border">' +
-                        '<div class="cell cell-name"><button class="name-btn" onclick="clickName(\'' + name + '\')">' + name + '</button></div>' +
-                        '<div class="cell cell-square"><div class="square ' + info.squares[0] + '">' + formatTime(info.timers[0]) + '</div></div>' +
-                        '<div class="cell cell-square"><div class="square ' + info.squares[1] + '">' + formatTime(info.timers[1]) + '</div></div>' +
-                        '<div class="cell cell-square"><div class="square ' + info.squares[2] + '">' + formatTime(info.timers[2]) + '</div></div>' +
-                        '<div class="cell cell-penalty"><div class="cell-x">' + formatPenalty(info.penalty_minutes) + '</div></div>' +
-                    '</div>';
-                }
+        var html = '<div class="row header">' +
+                   '<div class="cell cell-name">Имя</div>' +
+                   '<div class="cell cell-square">1</div>' +
+                   '<div class="cell cell-square">2</div>' +
+                   '<div class="cell cell-square">3</div>' +
+                   '<div class="cell cell-penalty">Ячейка Х</div>' +
+                   '</div>';
+                   
+        for (var name in data) {
+            if (data.hasOwnProperty(name)) {
+                var info = data[name];
+                html += '<div class="row row-border">' +
+                    '<div class="cell cell-name"><button class="name-btn" onclick="clickName(\'' + name + '\')">' + name + '</button></div>' +
+                    '<div class="cell cell-square"><div class="square ' + info.squares[0] + '">' + formatTime(info.timers[0]) + '</div></div>' +
+                    '<div class="cell cell-square"><div class="square ' + info.squares[1] + '">' + formatTime(info.timers[1]) + '</div></div>' +
+                    '<div class="cell cell-square"><div class="square ' + info.squares[2] + '">' + formatTime(info.timers[2]) + '</div></div>' +
+                    '<div class="cell cell-penalty"><div class="cell-x">' + formatPenalty(info.penalty_minutes) + '</div></div>' +
+                '</div>';
             }
-            container.innerHTML = html;
-        } catch(e) {
-            logDebug("Ошибка рендеринга таблицы: " + e.message);
         }
+        container.innerHTML = html;
     }
 
     function clickName(name) {
-        if (socket && socket.readyState === 1) { // 1 означает OPEN в старых спецификациях
-            try {
-                socket.send(JSON.stringify({ "action": "click", "name": name }));
-            } catch(e) {
-                logDebug("Ошибка отправки клика: " + e.message);
-            }
-        } else {
-            logDebug("Клик не отправлен: сокет не готов.");
-        }
+        apiRequest("/api/click", "POST", { "name": name }, function(response) {
+            renderTable(response.data);
+        });
     }
     
-    // Запуск процесса соединения
-    connect();
+    // Запускаем опрос сервера
+    setInterval(updateData, 1000);
+    updateData();
 </script>
 </body>
 </html>
@@ -314,6 +264,23 @@ HTML_TEMPLATE = """
 @app.get("/")
 async def get():
     return HTMLResponse(HTML_TEMPLATE)
+
+@app.get("/api/state")
+async def get_state():
+    # Отдаем текущие данные и состояние звука
+    res = {"data": CHILDREN_DATA, "play_sound": SYSTEM_FLAGS["play_sound"]}
+    # После того как флаг звука прочитан, сбрасываем его
+    SYSTEM_FLAGS["play_sound"] = False
+    return JSONResponse(res)
+
+@app.post("/api/click")
+async def post_click(request: Request):
+    data = await request.json()
+    name = data.get("name")
+    if name in CHILDREN_DATA:
+        handle_click(name)
+        SYSTEM_FLAGS["play_sound"] = True # Активируем звук для всех
+    return JSONResponse({"data": CHILDREN_DATA})
 
 def handle_click(name: str):
     child = CHILDREN_DATA[name]
@@ -346,35 +313,10 @@ async def tick_processing():
                 child["timers"][0] -= 1
                 if child["timers"][0] == 0:
                     child["squares"][0] = "gray"
-                    
-        await broadcast_state(play_sound=False)
-
-async def broadcast_state(play_sound: bool = False):
-    if active_connections:
-        payload = {
-            "data": CHILDREN_DATA,
-            "play_sound": play_sound
-        }
-        tasks = [connection.send_json(payload) for connection in active_connections]
-        await asyncio.gather(*tasks, return_exceptions=True)
 
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(tick_processing())
-
-@app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
-    active_connections.append(websocket)
-    await websocket.send_json({"data": CHILDREN_DATA, "play_sound": False})
-    try:
-        while True:
-            data = await websocket.receive_json()
-            if data.get("action") == "click":
-                handle_click(data.get("name"))
-                await broadcast_state(play_sound=True)
-    except WebSocketDisconnect:
-        active_connections.remove(websocket)
 
 if __name__ == "__main__":
     import uvicorn
