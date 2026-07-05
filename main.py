@@ -6,12 +6,12 @@ from fastapi.responses import HTMLResponse
 app = FastAPI()
 
 CHILDREN_DATA = {
-    "Максим": {
+    "ERIK": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0
     },
-    "Аня": {
+    "NICK": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0
