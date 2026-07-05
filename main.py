@@ -19,7 +19,7 @@ CHILDREN_DATA = {
 }
 
 active_connections: list[WebSocket] = []
-TIMER_DURATION = 1 * 60 
+TIMER_DURATION = 20 * 60 
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -54,7 +54,8 @@ HTML_TEMPLATE = """
     </style>
 </head>
 <body>
-<div class="container">
+<!-- Добавили принудительную разблокировку звука при любом первом клике по экрану -->
+<div class="container" onclick="initAudio()">
     <h2>Мониторинг Наказаний</h2>
     <div class="table" id="table-content"></div>
 </div>
@@ -62,25 +63,36 @@ HTML_TEMPLATE = """
     const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     const wsUrl = protocol + window.location.host + '/ws';
     let socket;
-    
-    // Функция для генерации чистого звука "Бип" без файлов
+    let audioCtx = null;
+
+    // Включаем аудио-движок при первом же прикосновении к экрану
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+    }
+
     function playBeep() {
+        initAudio();
+        if (!audioCtx) return;
         try {
-            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const oscillator = audioCtx.createOscillator();
             const gainNode = audioCtx.createGain();
             
             oscillator.type = 'sine';
-            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // Частота звука (880 Гц — высокий писк)
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
             
-            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); // Громкость
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); // Плавное затухание
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
             
             oscillator.connect(gainNode);
             gainNode.connect(audioCtx.destination);
             
             oscillator.start();
-            oscillator.stop(audioCtx.currentTime + 0.2); // Длительность звука 0.2 секунды
+            oscillator.stop(audioCtx.currentTime + 0.2);
         } catch (e) {
             console.log("Audio error:", e);
         }
@@ -107,8 +119,14 @@ HTML_TEMPLATE = """
     function connect() {
         socket = new WebSocket(wsUrl);
         socket.onmessage = function(event) {
-            const data = JSON.parse(event.data);
-            renderTable(data);
+            const response = JSON.parse(event.data);
+            
+            // Если сервер прислал команду включить звук — пищим
+            if (response.play_sound) {
+                playBeep();
+            }
+            
+            renderTable(response.data);
         };
         socket.onclose = function() { setTimeout(connect, 1500); };
     }
@@ -131,7 +149,6 @@ HTML_TEMPLATE = """
 
     function clickName(name) {
         if (socket && socket.readyState === WebSocket.OPEN) {
-            playBeep(); // Играем звук при нажатии
             socket.send(JSON.stringify({ "action": "click", "name": name }));
         }
     }
@@ -164,8 +181,6 @@ async def tick_processing():
     while True:
         await asyncio.sleep(1)
         for name, child in CHILDREN_DATA.items():
-            # Проверяем таймеры с конца (с 3-го по 1-й)
-            # Если активен более старший таймер, младшие стоят на паузе (заморожены)
             if child["timers"][2] > 0:
                 child["timers"][2] -= 1
                 if child["timers"][2] == 0:
@@ -179,11 +194,16 @@ async def tick_processing():
                 if child["timers"][0] == 0:
                     child["squares"][0] = "gray"
                     
-        await broadcast_state()
+        await broadcast_state(play_sound=False)
 
-async def broadcast_state():
+# Теперь эта функция умеет рассылать статус звука
+async def broadcast_state(play_sound: bool = False):
     if active_connections:
-        tasks = [connection.send_json(CHILDREN_DATA) for connection in active_connections]
+        payload = {
+            "data": CHILDREN_DATA,
+            "play_sound": play_sound
+        }
+        tasks = [connection.send_json(payload) for connection in active_connections]
         await asyncio.gather(*tasks, return_exceptions=True)
 
 @app.on_event("startup")
@@ -194,13 +214,15 @@ async def startup_event():
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     active_connections.append(websocket)
-    await websocket.send_json(CHILDREN_DATA)
+    # Первая отправка данных при подключении (без звука)
+    await websocket.send_json({"data": CHILDREN_DATA, "play_sound": False})
     try:
         while True:
             data = await websocket.receive_json()
             if data.get("action") == "click":
                 handle_click(data.get("name"))
-                await broadcast_state()
+                # Рассылаем всем статус и говорим включить звук
+                await broadcast_state(play_sound=True)
     except WebSocketDisconnect:
         active_connections.remove(websocket)
 
