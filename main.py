@@ -1,7 +1,7 @@
 import os
 import asyncio
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
@@ -133,7 +133,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
 <div class="container" onclick="initAudio()">
-    <h2>ЧУПРА</h2>
+    <h2>Мониторинг Наказаний</h2>
     <div class="table" id="table-content">Синхронизация с сервером...</div>
 </div>
 
@@ -150,7 +150,7 @@ HTML_TEMPLATE = """
                 source.connect(audioCtx.destination);
                 if (source.start) { source.start(0); } else if (source.noteOn) { source.noteOn(0); }
             } catch (e) {
-                console.log("Audio Error", e);
+                console.log("Audio Error");
             }
         }
     }
@@ -170,7 +170,7 @@ HTML_TEMPLATE = """
             if (oscillator.start) { oscillator.start(0); } else if (oscillator.noteOn) { oscillator.noteOn(0); }
             if (oscillator.stop) { oscillator.stop(audioCtx.currentTime + 0.2); } else if (oscillator.noteOff) { oscillator.noteOff(audioCtx.currentTime + 0.2); }
         } catch (e) {
-            console.log("Play Error", e);
+            console.log("Play Error");
         }
     }
 
@@ -192,10 +192,11 @@ HTML_TEMPLATE = """
         return "-" + m + "m";
     }
 
-    // Классический AJAX-запрос, работающий на любой версии iOS
+    // Полностью совместимый AJAX-запрос
     function apiRequest(url, method, data, callback) {
         var xhr = new XMLHttpRequest();
-        xhr.open(method, url, true);
+        // Используем явные относительные пути от текущего хоста
+        xhr.open(method, window.location.origin + url, true);
         xhr.setRequestHeader("Content-Type", "application/json");
         xhr.onreadystatechange = function () {
             if (xhr.readyState === 4 && xhr.status === 200) {
@@ -210,13 +211,14 @@ HTML_TEMPLATE = """
         xhr.send(data ? JSON.stringify(data) : null);
     }
 
-    // Регулярное обновление данных (раз в 1 секунду)
     function updateData() {
         apiRequest("/api/state", "GET", null, function(response) {
-            if (response.play_sound) {
+            if (response && response.play_sound) {
                 playBeep();
             }
-            renderTable(response.data);
+            if (response && response.data) {
+                renderTable(response.data);
+            }
         });
     }
 
@@ -249,11 +251,13 @@ HTML_TEMPLATE = """
 
     function clickName(name) {
         apiRequest("/api/click", "POST", { "name": name }, function(response) {
-            renderTable(response.data);
+            if (response && response.data) {
+                renderTable(response.data);
+            }
         });
     }
     
-    // Запускаем опрос сервера
+    // Интервал опроса раз в 1 секунду
     setInterval(updateData, 1000);
     updateData();
 </script>
@@ -267,11 +271,10 @@ async def get():
 
 @app.get("/api/state")
 async def get_state():
-    # Отдаем текущие данные и состояние звука
-    res = {"data": CHILDREN_DATA, "play_sound": SYSTEM_FLAGS["play_sound"]}
-    # После того как флаг звука прочитан, сбрасываем его
+    # Возвращаем стандартный dict — FastAPI сам сериализует его без ошибок типов данных
+    current_sound = SYSTEM_FLAGS["play_sound"]
     SYSTEM_FLAGS["play_sound"] = False
-    return JSONResponse(res)
+    return {"data": CHILDREN_DATA, "play_sound": current_sound}
 
 @app.post("/api/click")
 async def post_click(request: Request):
@@ -279,8 +282,8 @@ async def post_click(request: Request):
     name = data.get("name")
     if name in CHILDREN_DATA:
         handle_click(name)
-        SYSTEM_FLAGS["play_sound"] = True # Активируем звук для всех
-    return JSONResponse({"data": CHILDREN_DATA})
+        SYSTEM_FLAGS["play_sound"] = True
+    return {"data": CHILDREN_DATA}
 
 def handle_click(name: str):
     child = CHILDREN_DATA[name]
