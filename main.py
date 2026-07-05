@@ -134,7 +134,7 @@ HTML_TEMPLATE = """
     function renderTable(data) {
         const container = document.getElementById('table-content');
         if (!container) return;
-        let html = `<div class="row header"><div>Имя</div><div style="text-align:center">1</div><div style="text-align:center">2</div><div style="text-align:center">3</div><div style="text-align:center">Ячейка Х</div></div>`;
+        let html = `<div class="row header"><div>Имя</div><div style="text-align:center">1</div><div style="text-align:center">2</div><div style="text-align:center">3</div><div style="text-align:center">ШТРАФ</div></div>`;
         for (const [name, info] of Object.entries(data)) {
             html += `<div class="row">
                 <button class="name-btn" onclick="clickName('${name}')">${name}</button>
