@@ -7,9 +7,9 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-# Пароль для активации режима Администратора
+# Конфигурация системы
 ADMIN_PASSWORD = "1234"
-TIMER_DURATION = 20 * 60 
+TIMER_DURATION = 20 * 60  # 20 минут в секундах
 
 CHILDREN_DATA = {
     "ERIK": {
@@ -144,7 +144,6 @@ HTML_TEMPLATE = """
             opacity: 0.8;
         }
         
-        /* Сетка для Chrome 63 */
         .controls-row {
             display: grid;
             grid-template-columns: repeat(3, 1fr) 1.3fr;
@@ -156,11 +155,10 @@ HTML_TEMPLATE = """
             width: 100%;
         }
         
-        /* Контейнер для фикса отсутствия aspect-ratio в старом Chrome */
         .square-wrapper {
             position: relative;
             width: 100%;
-            padding-top: 100%; /* Делает блок идеально квадратным */
+            padding-top: 100%;
         }
         
         .square { 
@@ -204,7 +202,6 @@ HTML_TEMPLATE = """
         .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         
-        /* Обертка для штрафной ячейки, чтобы совпадала по высоте с квадратами */
         .cell-x-wrapper {
             position: relative;
             width: 100%;
@@ -722,7 +719,7 @@ HTML_TEMPLATE = """
     function renderLogs(logsList) {
         var content = document.getElementById('logContent');
         if (content) {
-            content.textContent = logsList.length > 0 ? logsList.reverse().join('\\n') : "История пуста.";
+            content.textContent = logsList.length > 0 ? logsList.slice().reverse().join('\\n') : "История пуста.";
         }
     }
 
