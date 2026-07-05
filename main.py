@@ -4,7 +4,6 @@ import uuid
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel
 
 app = FastAPI()
 
@@ -27,16 +26,12 @@ CHILDREN_DATA = {
     }
 }
 
-# Ограничение размера логов в памяти
 SYSTEM_LOGS = []
-
-# Структура для отслеживания активных соединений и их прав
-# Хранит dict вида: { websocket_object: {"id": str, "is_admin": bool} }
 ACTIVE_CONNECTIONS = {}
 
 def add_log(message: str):
     now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
-    SYSTEM_LOGS.append(f"[{now}] {message}")
+    SYSTEM_LOGS.append("[" + now + "] " + message)
     if len(SYSTEM_LOGS) > 100:
         SYSTEM_LOGS.pop(0)
 
@@ -82,8 +77,6 @@ HTML_TEMPLATE = """
         .cards-wrapper { 
             display: flex;
             flex-direction: column;
-            gap: 20px;
-            flex-grow: 1;
             width: 100%;
             box-sizing: border-box;
         }
@@ -94,15 +87,13 @@ HTML_TEMPLATE = """
             padding: 18px; 
             box-shadow: 0 8px 24px rgba(0,0,0,0.4);
             border: 3px solid #3d3d4e;
-            transition: all 0.3s ease;
             display: flex;
             flex-direction: column;
-            gap: 15px;
+            margin-bottom: 20px; /* Замена gap */
         }
 
         .user-card.edit-active {
             border-color: #ff69b4 !important;
-            box-shadow: 0 0 20px rgba(255, 105, 180, 0.3);
         }
         
         .name-btn { 
@@ -117,6 +108,7 @@ HTML_TEMPLATE = """
             width: 100%;
             box-sizing: border-box;
             text-align: center;
+            margin-bottom: 15px; /* Замена gap */
             -webkit-appearance: none;
             appearance: none;
             touch-action: none;
@@ -184,7 +176,6 @@ HTML_TEMPLATE = """
             appearance: none;
         }
 
-        /* Контейнер регулировки штрафа для режима редактирования */
         .penalty-edit-container {
             display: flex;
             flex-direction: column;
@@ -193,7 +184,7 @@ HTML_TEMPLATE = """
         }
 
         .penalty-edit-btn {
-            height: 48%;
+            height: 32px; /* Фиксированная высота для старых браузеров */
             border: 2px solid #ff69b4;
             border-radius: 8px;
             font-size: 18px;
@@ -205,10 +196,9 @@ HTML_TEMPLATE = """
             -webkit-appearance: none;
             appearance: none;
         }
-        .btn-inc { background-color: #2e7d32; color: #fff; }
+        .btn-inc { background-color: #2e7d32; color: #fff; margin-bottom: 5px; }
         .btn-dec { background-color: #c62828; color: #fff; }
 
-        /* Нижняя панель управления системными кнопками */
         .bottom-bar {
             display: flex;
             justify-content: space-between;
@@ -218,7 +208,6 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
 
-        /* Кнопка Администратора "А" */
         .admin-trigger-btn {
             width: 36px;
             height: 36px;
@@ -232,7 +221,6 @@ HTML_TEMPLATE = """
             display: flex;
             justify-content: center;
             align-items: center;
-            transition: all 0.3s ease;
             -webkit-appearance: none;
             appearance: none;
         }
@@ -241,7 +229,6 @@ HTML_TEMPLATE = """
             background-color: #1b5e20;
             border-color: #4caf50;
             color: #fff;
-            box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
         }
 
         .log-trigger-btn {
@@ -255,10 +242,7 @@ HTML_TEMPLATE = """
             -webkit-appearance: none;
             appearance: none;
         }
-        
-        .log-trigger-btn:active { color: #8a8a9a; }
 
-        /* Модальные окна */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -316,7 +300,6 @@ HTML_TEMPLATE = """
             user-select: text;
         }
 
-        /* Окно ввода пароля */
         .auth-window {
             background-color: #1e1e24;
             border: 2px solid #3d3d4e;
@@ -325,7 +308,6 @@ HTML_TEMPLATE = """
             padding: 20px;
             display: flex;
             flex-direction: column;
-            gap: 15px;
             align-items: center;
             box-shadow: 0 10px 30px rgba(0,0,0,0.6);
         }
@@ -334,6 +316,7 @@ HTML_TEMPLATE = """
             font-size: 18px;
             font-weight: bold;
             color: #a0a0ab;
+            margin-bottom: 15px;
         }
 
         .auth-input {
@@ -348,15 +331,11 @@ HTML_TEMPLATE = """
             letter-spacing: 6px;
             box-sizing: border-box;
             outline: none;
-        }
-
-        .auth-input:focus {
-            border-color: #4caf50;
+            margin-bottom: 15px;
         }
 
         .auth-buttons {
             display: flex;
-            gap: 10px;
             width: 100%;
         }
 
@@ -369,12 +348,12 @@ HTML_TEMPLATE = """
             cursor: pointer;
             font-size: 14px;
         }
-        .auth-confirm { background-color: #4caf50; color: white; }
+        .auth-confirm { background-color: #4caf50; color: white; margin-left: 10px; }
         .auth-cancel { background-color: #3d3d4e; color: white; }
     </style>
 </head>
-<body>
-<div class="container" pointerdown="initAudio()">
+<body pointerdown="initAudio()">
+<div class="container">
     <div>
         <h2>Мониторинг Наказаний</h2>
         <div class="cards-wrapper" id="table-content"></div>
@@ -386,7 +365,6 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Модальное окно истории -->
 <div class="modal-overlay" id="logOverlay" onclick="closeModal('logOverlay', event)">
     <div class="log-window" onclick="event.stopPropagation()">
         <div class="modal-header">
@@ -397,7 +375,6 @@ HTML_TEMPLATE = """
     </div>
 </div>
 
-<!-- Модальное окно авторизации А-режима -->
 <div class="modal-overlay" id="authOverlay" onclick="closeModal('authOverlay', event)">
     <div class="auth-window" onclick="event.stopPropagation()">
         <div class="auth-title">Вход в режим "А"</div>
@@ -410,6 +387,7 @@ HTML_TEMPLATE = """
 </div>
 
 <script>
+    // Полный переход на ES5 синтаксис (совместимость со старыми браузерами 2017 года)
     var protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     var wsUrl = protocol + window.location.host + '/ws';
     var socket;
@@ -418,7 +396,7 @@ HTML_TEMPLATE = """
     
     var lastClickTime = 0;
     var CLICK_DEBOUNCE_MS = 300;
-    var clientIsAdmin = false; // Локальный статус админа для отрисовки
+    var clientIsAdmin = false;
 
     function initAudio() {
         if (!audioCtx) {
@@ -488,49 +466,49 @@ HTML_TEMPLATE = """
         if (!container) return;
         
         var html = "";
-        var keys = Object.keys(data);
         
-        for (var i = 0; i < keys.length; i++) {
-            var name = keys[i];
-            var info = data[name];
-            
-            var editClass = info.edit_mode ? "edit-active" : "";
-            var isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
-            var nameDisabled = clientIsAdmin ? "" : "disabled";
+        // Используем базовый for-in цикл без Object.keys/Object.entries
+        for (var name in data) {
+            if (Object.prototype.hasOwnProperty.call(data, name)) {
+                var info = data[name];
+                
+                var editClass = info.edit_mode ? "edit-active" : "";
+                var isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
+                var nameDisabled = clientIsAdmin ? "" : "disabled";
 
-            // Генерируем блок штрафа: либо обычная ячейка, либо +/- в режиме редактирования
-            var penaltyBlockHtml = "";
-            if (info.edit_mode && clientIsAdmin) {
-                penaltyBlockHtml = '<div class="penalty-edit-container">' +
-                    '<button class="penalty-edit-btn btn-inc" onclick="modifyPenalty(\'' + name + '\', \'inc\')">+</button>' +
-                    '<button class="penalty-edit-btn btn-dec" onclick="modifyPenalty(\'' + name + '\', \'dec\')">-</button>' +
+                var penaltyBlockHtml = "";
+                if (info.edit_mode && clientIsAdmin) {
+                    penaltyBlockHtml = '<div class="penalty-edit-container">' +
+                        '<button class="penalty-edit-btn btn-inc" onclick="modifyPenalty(\'' + name + '\', \'inc\')">+</button>' +
+                        '<button class="penalty-edit-btn btn-dec" onclick="modifyPenalty(\'' + name + '\', \'dec\')">-</button>' +
+                    '</div>';
+                } else {
+                    penaltyBlockHtml = '<button class="cell-x" disabled>' +
+                        formatPenalty(info.penalty_minutes) +
+                    '</button>';
+                }
+
+                html += '<div class="user-card ' + editClass + '">' +
+                    '<button class="name-btn" ' + nameDisabled + ' ' +
+                            'onpointerdown="startPress(event, \'' + name + '\')" ' +
+                            'onpointerup="endPress(event, \'' + name + '\')" ' +
+                            'onpointerleave="cancelPress()">' +
+                        name + (info.edit_mode ? " ⚙" : "") +
+                    '</button>' +
+                    '<div class="controls-row">' +
+                        '<button class="square ' + info.squares[0] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 0)">' +
+                            '<span>1</span><strong>' + formatTime(info.timers[0]) + '</strong>' +
+                        '</button>' +
+                        '<button class="square ' + info.squares[1] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 1)">' +
+                            '<span>2</span><strong>' + formatTime(info.timers[1]) + '</strong>' +
+                        '</button>' +
+                        '<button class="square ' + info.squares[2] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 2)">' +
+                            '<span>3</span><strong>' + formatTime(info.timers[2]) + '</strong>' +
+                        '</button>' +
+                        penaltyBlockHtml +
+                    '</div>' +
                 '</div>';
-            } else {
-                penaltyBlockHtml = '<button class="cell-x" disabled>' +
-                    formatPenalty(info.penalty_minutes) +
-                '</button>';
             }
-
-            html += '<div class="user-card ' + editClass + '">' +
-                '<button class="name-btn" ' + nameDisabled + ' ' +
-                        'onpointerdown="startPress(event, \'' + name + '\')" ' +
-                        'onpointerup="endPress(event, \'' + name + '\')" ' +
-                        'onpointerleave="cancelPress()">' +
-                    name + (info.edit_mode ? " ⚙" : "") +
-                '</button>' +
-                '<div class="controls-row">' +
-                    '<button class="square ' + info.squares[0] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 0)">' +
-                        '<span>1</span><strong>' + formatTime(info.timers[0]) + '</strong>' +
-                    '</button>' +
-                    '<button class="square ' + info.squares[1] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 1)">' +
-                        '<span>2</span><strong>' + formatTime(info.timers[1]) + '</strong>' +
-                    '</button>' +
-                    '<button class="square ' + info.squares[2] + '" ' + isClickable + ' onclick="clickElement(\'' + name + '\', 2)">' +
-                        '<span>3</span><strong>' + formatTime(info.timers[2]) + '</strong>' +
-                    '</button>' +
-                    penaltyBlockHtml +
-                '</div>' +
-            '</div>';
         }
         container.innerHTML = html;
     }
@@ -620,7 +598,12 @@ HTML_TEMPLATE = """
     function renderLogs(logsList) {
         var content = document.getElementById('logContent');
         if (content) {
-            content.textContent = logsList.length > 0 ? logsList.slice().reverse().join('\\n') : "История пуста.";
+            // Разворачиваем лог через классический цикл вместо .slice().reverse()
+            var text = "";
+            for (var i = logsList.length - 1; i >= 0; i--) {
+                text += logsList[i] + "\\n";
+            }
+            content.textContent = text ? text : "История пуста.";
         }
     }
 
