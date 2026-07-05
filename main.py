@@ -37,29 +37,28 @@ HTML_TEMPLATE = """
             color: #ffffff;
             font-family: 'Segoe UI', Arial, sans-serif;
             overflow: hidden;
+            -webkit-user-select: none;
+            user-select: none;
         }
         
-        /* Растягиваем контейнер строго на весь экран без скролла */
         .container { 
             display: flex;
             flex-direction: column;
+            width: 100vw; 
             height: 100vh;
-            width: 100vw;
             box-sizing: border-box;
-            padding: 1.5vh 1.5vw;
+            padding: 2vh 2vw;
         }
         
-        /* Крупный заголовок */
         h2 { 
             text-align: center; 
             color: #a0a0ab; 
-            margin: 0 0 1.5vh 0; 
-            font-size: 4vh;
+            margin: 0 0 2vh 0; 
+            font-size: 4.5vh;
             height: 5vh;
             line-height: 5vh;
         }
         
-        /* Таблица на всю оставшуюся высоту */
         .table { 
             display: flex;
             flex-direction: column;
@@ -71,21 +70,26 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
         
-        /* Строки таблицы делят место поровну */
         .row { 
-            display: flex;
-            flex-direction: row;
-            align-items: center;
+            display: grid; 
+            grid-template-columns: 2.2fr 1fr 1fr 1fr 1.3fr; 
+            align-items: center; 
+            gap: 1.5vw; 
             width: 100%;
-            gap: 1.5vw;
         }
         
         .header { 
-            height: 6vh;
+            height: 7vh;
             font-weight: bold; 
             color: #8b8b98; 
             border-bottom: 3px solid #3d3d4e; 
-            font-size: 3vh;
+            font-size: 3.5vh;
+            text-align: center;
+        }
+        
+        .header div:first-child {
+            text-align: left;
+            padding-left: 1vw;
         }
         
         .row-user {
@@ -97,33 +101,20 @@ HTML_TEMPLATE = """
             border-bottom: none; 
         }
         
-        /* Колонки с фиксированными долями ширины */
-        .cell-name { width: 28%; }
-        .cell-square { width: 15%; text-align: center; }
-        .cell-penalty { width: 27%; }
-        
-        .header .cell-square {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        /* Громадная кнопка с именем */
         .name-btn { 
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
             background-color: #2b2b36; 
             color: #fff; 
             border: 2px solid #444454; 
-            padding: 0;
+            padding: 0 2vw; 
             border-radius: 14px; 
-            font-size: 5vh; 
+            font-size: 5.5vh; 
             font-weight: bold; 
             cursor: pointer; 
-            text-align: center; 
+            height: 85%;
             width: 100%;
-            height: 80%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             box-sizing: border-box;
             -webkit-appearance: none;
         }
@@ -132,10 +123,7 @@ HTML_TEMPLATE = """
             background-color: #3d3d4e;
         }
         
-        /* Огромные квадратные таймеры */
         .square { 
-            width: 100%;
-            height: 80%;
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
@@ -144,6 +132,8 @@ HTML_TEMPLATE = """
             font-weight: bold; 
             color: #fff; 
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8); 
+            height: 85%;
+            width: 100%;
             box-sizing: border-box;
         }
         
@@ -152,19 +142,18 @@ HTML_TEMPLATE = """
         .orange { background-color: #ef6c00; }
         .red { background-color: #c62828; }
         
-        /* Внушительная штрафная зона Х */
         .cell-x { 
             background-color: #141419; 
             border: 2px dashed #c62828; 
             border-radius: 14px; 
-            width: 100%;
-            height: 80%;
+            height: 85%; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
             font-size: 5vh; 
             font-weight: bold; 
             color: #ff5252; 
+            width: 100%;
             box-sizing: border-box;
         }
     </style>
@@ -218,7 +207,7 @@ HTML_TEMPLATE = """
         const m = Math.floor((seconds % 3600) / 60);
         const s = seconds % 60;
         if (h > 0) return `${h}h`;
-        if (m > 0) return `${m}m`; // Оставляем только минуты, чтобы текст не мельчил из-за секунд
+        if (m > 0) return `${m}m`;
         return `${s}s`;
     }
 
@@ -247,30 +236,20 @@ HTML_TEMPLATE = """
         if (!container) return;
         
         let html = `<div class="row header">
-            <div class="cell-name">Имя</div>
-            <div class="cell-square">1</div>
-            <div class="cell-square">2</div>
-            <div class="cell-square">3</div>
-            <div class="cell-penalty" style="text-align:center">Ячейка Х</div>
+            <div>Имя</div>
+            <div>1</div>
+            <div>2</div>
+            <div>3</div>
+            <div>Ячейка Х</div>
         </div>`;
         
         for (const [name, info] of Object.entries(data)) {
             html += `<div class="row row-user">
-                <div class="cell-name">
-                    <button class="name-btn" onclick="clickName('${name}')">${name}</button>
-                </div>
-                <div class="cell-square">
-                    <div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div>
-                </div>
-                <div class="cell-square">
-                    <div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div>
-                </div>
-                <div class="cell-square">
-                    <div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div>
-                </div>
-                <div class="cell-penalty">
-                    <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
-                </div>
+                <button class="name-btn" onclick="clickName('${name}')">${name}</button>
+                <div class="square ${info.squares[0]}">${formatTime(info.timers[0])}</div>
+                <div class="square ${info.squares[1]}">${formatTime(info.timers[1])}</div>
+                <div class="square ${info.squares[2]}">${formatTime(info.timers[2])}</div>
+                <div class="cell-x">${formatPenalty(info.penalty_minutes)}</div>
             </div>`;
         }
         container.innerHTML = html;
@@ -322,7 +301,7 @@ async def tick_processing():
                 child["timers"][0] -= 1
                 if child["timers"][0] == 0:
                     child["squares"][0] = "gray"
-                        
+                    
         await broadcast_state(play_sound=False)
 
 async def broadcast_state(play_sound: bool = False):
