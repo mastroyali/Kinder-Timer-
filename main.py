@@ -1,13 +1,19 @@
 import os
 import asyncio
+import uuid
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
+from pydantic import BaseModel
 
 app = FastAPI()
 
+# Пароль для активации режима Администратора
+ADMIN_PASSWORD = "3003"
+TIMER_DURATION = 20 * 60 
+
 CHILDREN_DATA = {
-    "ERIС": {
+    "ERIC": {
         "squares": ["gray", "gray", "gray"],
         "timers": [0, 0, 0],
         "penalty_minutes": 0,
@@ -21,10 +27,11 @@ CHILDREN_DATA = {
     }
 }
 
-# Список для хранения истории событий
 SYSTEM_LOGS = []
-active_connections: list[WebSocket] = []
-TIMER_DURATION = 20 * 60 
+
+# Структура для отслеживания активных соединений и их прав
+# Хранит dict вида: { websocket_object: {"id": str, "is_admin": bool} }
+ACTIVE_CONNECTIONS = {}
 
 def add_log(message: str):
     now = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
@@ -60,7 +67,7 @@ HTML_TEMPLATE = """
             min-height: 100vh;
             box-sizing: border-box;
             padding: 15px;
-            justify-content: space-between; /* Прижимает логи к низу */
+            justify-content: space-between;
         }
         
         h2 { 
@@ -80,7 +87,6 @@ HTML_TEMPLATE = """
             box-sizing: border-box;
         }
         
-        /* Вертикальная карточка ребенка */
         .user-card {
             background-color: #1e1e24; 
             border-radius: 20px; 
@@ -98,7 +104,6 @@ HTML_TEMPLATE = """
             box-shadow: 0 0 20px rgba(255, 105, 180, 0.3);
         }
         
-        /* Крупная кнопка с именем сверху */
         .name-btn { 
             background-color: #2b2b36; 
             color: #fff; 
@@ -116,20 +121,19 @@ HTML_TEMPLATE = """
             touch-action: none;
         }
         
-        .name-btn:active {
-            background-color: #3d3d4e;
+        .name-btn:disabled {
+            cursor: default;
+            opacity: 0.8;
         }
         
-        /* Ряд элементов управления под именем */
         .controls-row {
             display: grid;
-            grid-template-columns: repeat(3, 1fr) 1.2fr;
+            grid-template-columns: repeat(3, 1fr) 1.3fr;
             gap: 10px;
             align-items: center;
             width: 100%;
         }
         
-        /* Квадратные кнопки предупреждений */
         .square { 
             aspect-ratio: 1 / 1;
             width: 100%;
@@ -150,7 +154,7 @@ HTML_TEMPLATE = """
             cursor: default;
         }
 
-        .edit-active .square:not(.gray), .edit-active .cell-x {
+        .edit-active .square:not(.gray) {
             cursor: pointer;
             border-color: #ff69b4 !important;
         }
@@ -160,17 +164,16 @@ HTML_TEMPLATE = """
         .orange { background-color: #ef6c00 !important; color: #ffffff !important; border-color: #ff9d3f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         .red { background-color: #c62828 !important; color: #ffffff !important; border-color: #ff5f5f; text-shadow: 1px 1px 2px rgba(0,0,0,0.6); }
         
-        /* Клетка штрафа «X» справа от квадратов */
         .cell-x { 
             height: 100%;
-            min-height: 70px;
+            min-height: 75px;
             background-color: #141419 !important; 
             border: 3px dashed #c62828; 
             border-radius: 14px; 
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 20px; 
+            font-size: 19px; 
             font-weight: bold; 
             color: #ff5252 !important; 
             width: 100%;
@@ -179,12 +182,65 @@ HTML_TEMPLATE = """
             appearance: none;
         }
 
-        /* Меленькая текстовая кнопка логов в самом низу экрана */
-        .log-trigger-wrapper {
+        /* Контейнер регулировки штрафа для режима редактирования */
+        .penalty-edit-container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 5px;
+            height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .penalty-edit-btn {
+            height: 100%;
+            min-height: 75px;
+            border: 2px solid #ff69b4;
+            border-radius: 12px;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
             display: flex;
             justify-content: center;
+            align-items: center;
+            -webkit-appearance: none;
+        }
+        .btn-inc { background-color: #2e7d32; color: #fff; }
+        .btn-dec { background-color: #c62828; color: #fff; }
+
+        /* Нижняя панель управления системными кнопками */
+        .bottom-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             width: 100%;
-            padding: 15px 0 5px 0;
+            padding: 15px 10px 5px 10px;
+            box-sizing: border-box;
+        }
+
+        /* Кнопка Администратора "А" */
+        .admin-trigger-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: 2px solid #444454;
+            background-color: #2b2b36;
+            color: #a0a0ab;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: all 0.3s ease;
+            -webkit-appearance: none;
+        }
+
+        .admin-trigger-btn.admin-active {
+            background-color: #1b5e20;
+            border-color: #4caf50;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(76, 175, 80, 0.4);
         }
 
         .log-trigger-btn {
@@ -194,16 +250,14 @@ HTML_TEMPLATE = """
             font-size: 13px;
             text-decoration: underline;
             cursor: pointer;
-            padding: 5px 15px;
+            padding: 5px 10px;
             -webkit-appearance: none;
         }
         
-        .log-trigger-btn:active {
-            color: #8a8a9a;
-        }
+        .log-trigger-btn:active { color: #8a8a9a; }
 
-        /* Модальное окно истории */
-        .log-overlay {
+        /* Модальные окна */
+        .modal-overlay {
             display: none;
             position: fixed;
             top: 0; left: 0; width: 100vw; height: 100vh;
@@ -227,7 +281,7 @@ HTML_TEMPLATE = """
             overflow: hidden;
         }
 
-        .log-header {
+        .modal-header {
             padding: 15px;
             border-bottom: 1px solid #3d3d4e;
             display: flex;
@@ -237,7 +291,7 @@ HTML_TEMPLATE = """
             color: #a0a0ab;
         }
 
-        .log-close {
+        .modal-close {
             background: #3d3d4e;
             border: none;
             color: #fff;
@@ -259,28 +313,97 @@ HTML_TEMPLATE = """
             -webkit-user-select: text;
             user-select: text;
         }
+
+        /* Окно ввода пароля */
+        .auth-window {
+            background-color: #1e1e24;
+            border: 2px solid #3d3d4e;
+            border-radius: 16px;
+            width: 280px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+        }
+
+        .auth-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #a0a0ab;
+        }
+
+        .auth-input {
+            width: 100%;
+            background-color: #141419;
+            border: 2px solid #444454;
+            border-radius: 10px;
+            padding: 12px;
+            color: #fff;
+            font-size: 22px;
+            text-align: center;
+            letter-spacing: 6px;
+            box-sizing: border-box;
+            outline: none;
+        }
+
+        .auth-input:focus {
+            border-color: #4caf50;
+        }
+
+        .auth-buttons {
+            display: flex;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .auth-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .auth-confirm { background-color: #4caf50; color: white; }
+        .auth-cancel { background-color: #3d3d4e; color: white; }
     </style>
 </head>
 <body>
 <div class="container" pointerdown="initAudio()">
     <div>
-        <h2>Ч У П Р А</h2>
+        <h2>ЧУПРА</h2>
         <div class="cards-wrapper" id="table-content"></div>
     </div>
     
-    <div class="log-trigger-wrapper">
+    <div class="bottom-bar">
+        <button class="admin-trigger-btn" id="adminBtn" onclick="clickAdminButton()">А</button>
         <button class="log-trigger-btn" onclick="openLogs()">Логи системы</button>
     </div>
 </div>
 
-<!-- Окно логов -->
-<div class="log-overlay" id="logOverlay" onclick="closeLogs(event)">
+<!-- Модальное окно истории -->
+<div class="modal-overlay" id="logOverlay" onclick="closeModal('logOverlay', event)">
     <div class="log-window" onclick="event.stopPropagation()">
-        <div class="log-header">
+        <div class="modal-header">
             <span>История событий</span>
-            <button class="log-close" onclick="document.getElementById('logOverlay').style.display='none'">Закрыть</button>
+            <button class="modal-close" onclick="document.getElementById('logOverlay').style.display='none'">Закрыть</button>
         </div>
         <div class="log-content" id="logContent">Загрузка...</div>
+    </div>
+</div>
+
+<!-- Модальное окно авторизации А-режима -->
+<div class="modal-overlay" id="authOverlay" onclick="closeModal('authOverlay', event)">
+    <div class="auth-window" onclick="event.stopPropagation()">
+        <div class="auth-title">Вход в режим "А"</div>
+        <input type="password" class="auth-input" id="authPin" inputmode="numeric" pattern="[0-9]*" maxlength="4" placeholder="••••">
+        <div class="auth-buttons">
+            <button class="auth-btn class auth-cancel" onclick="document.getElementById('authOverlay').style.display='none'">Отмена</button>
+            <button class="auth-btn auth-confirm" onclick="submitAuth()">Войти</button>
+        </div>
     </div>
 </div>
 
@@ -293,6 +416,7 @@ HTML_TEMPLATE = """
     
     let lastClickTime = 0;
     const CLICK_DEBOUNCE_MS = 300;
+    let clientIsAdmin = false; // Локальный статус админа для отрисовки
 
     function initAudio() {
         if (!audioCtx) {
@@ -340,6 +464,17 @@ HTML_TEMPLATE = """
         socket.onmessage = function(event) {
             const response = JSON.parse(event.data);
             if (response.play_sound) playBeep();
+            
+            if (response.hasOwnProperty("is_admin")) {
+                clientIsAdmin = response.is_admin;
+                const btn = document.getElementById("adminBtn");
+                if (clientIsAdmin) {
+                    btn.classList.add("admin-active");
+                } else {
+                    btn.classList.remove("admin-active");
+                }
+            }
+            
             if (response.data) renderTable(response.data);
             if (response.logs) renderLogs(response.logs);
         };
@@ -353,11 +488,27 @@ HTML_TEMPLATE = """
         let html = "";
         for (const [name, info] of Object.entries(data)) {
             const editClass = info.edit_mode ? "edit-active" : "";
-            const isClickable = info.edit_mode ? "" : "disabled";
+            const isClickable = (info.edit_mode && clientIsAdmin) ? "" : "disabled";
+            const nameDisabled = clientIsAdmin ? "" : "disabled";
+
+            // Генерируем блок штрафа: либо обычная ячейка, либо +/- в режиме редактирования
+            let penaltyBlockHtml = "";
+            if (info.edit_mode && clientIsAdmin) {
+                penaltyBlockHtml = `
+                <div class="penalty-edit-container">
+                    <button class="penalty-edit-btn btn-inc" onclick="modifyPenalty('${name}', 'inc')">+</button>
+                    <button class="penalty-edit-btn btn-dec" onclick="modifyPenalty('${name}', 'dec')">-</button>
+                </div>`;
+            } else {
+                penaltyBlockHtml = `
+                <button class="cell-x" disabled>
+                    ${formatPenalty(info.penalty_minutes)}
+                </button>`;
+            }
 
             html += `
             <div class="user-card ${editClass}">
-                <button class="name-btn" 
+                <button class="name-btn" ${nameDisabled}
                         onpointerdown="startPress(event, '${name}')" 
                         onpointerup="endPress(event, '${name}')" 
                         onpointerleave="cancelPress()">
@@ -373,9 +524,7 @@ HTML_TEMPLATE = """
                     <button class="square ${info.squares[2]}" ${isClickable} onclick="clickElement('${name}', 2)">
                         <span>3</span><strong>${formatTime(info.timers[2])}</strong>
                     </button>
-                    <button class="cell-x" ${isClickable} onclick="clickElement('${name}', 'x')">
-                        ${formatPenalty(info.penalty_minutes)}
-                    </button>
+                    ${penaltyBlockHtml}
                 </div>
             </div>`;
         }
@@ -383,6 +532,7 @@ HTML_TEMPLATE = """
     }
 
     function startPress(e, name) {
+        if (!clientIsAdmin) return;
         e.preventDefault();
         initAudio();
         cancelPress();
@@ -398,6 +548,7 @@ HTML_TEMPLATE = """
     }
 
     function endPress(e, name) {
+        if (!clientIsAdmin) return;
         e.preventDefault();
         const currentTime = new Date().getTime();
         
@@ -420,6 +571,7 @@ HTML_TEMPLATE = """
     }
 
     function clickElement(name, elementIdx) {
+        if (!clientIsAdmin) return;
         const currentTime = new Date().getTime();
         if (currentTime - lastClickTime < CLICK_DEBOUNCE_MS) return;
         lastClickTime = currentTime;
@@ -427,14 +579,38 @@ HTML_TEMPLATE = """
         sendAction({ "action": "cancel_element", "name": name, "element": elementIdx });
     }
 
+    function modifyPenalty(name, operation) {
+        if (!clientIsAdmin) return;
+        sendAction({ "action": "modify_penalty", "name": name, "operation": operation });
+    }
+
+    function clickAdminButton() {
+        if (clientIsAdmin) {
+            // Если уже админ — выходим без запроса пароля
+            sendAction({ "action": "admin_logout" });
+        } else {
+            document.getElementById("authPin").value = "";
+            document.getElementById("authOverlay").style.display = "flex";
+            document.getElementById("authPin").focus();
+        }
+    }
+
+    function submitAuth() {
+        const pin = document.getElementById("authPin").value;
+        if (pin.length === 4) {
+            sendAction({ "action": "admin_login", "password": pin });
+            document.getElementById("authOverlay").style.display = "none";
+        }
+    }
+
     function openLogs() {
         document.getElementById('logOverlay').style.display = 'flex';
         sendAction({ "action": "request_logs" });
     }
 
-    function closeLogs(e) {
-        if(e.target.id === 'logOverlay') {
-            document.getElementById('logOverlay').style.display = 'none';
+    function closeModal(id, e) {
+        if(e.target.id === id) {
+            document.getElementById(id).style.display = 'none';
         }
     }
 
@@ -481,24 +657,34 @@ def handle_click(name: str):
         add_log(f"Для {name} активировано 3-е предупреждение (Красный квадрат).")
     elif squares[2] == "red":
         child["penalty_minutes"] += 20
-        add_log(f"Для {name} добавлено +20 минут штрафа в Ячейку Х. Всего: {child['penalty_minutes']}м.")
+        # Новая логика: время в предыдущем (3-м) кубике снова становится 20 минут
+        child["timers"][2] = TIMER_DURATION
+        add_log(f"Для {name} добавлено +20 минут штрафа. Время 3-го кубика возвращено на 20 мин. Всего штрафа: {child['penalty_minutes']}м.")
 
 def handle_cancel(name: str, element):
     child = CHILDREN_DATA[name]
     if not child["edit_mode"]:
         return
 
-    if element == 'x':
+    idx = int(element)
+    color_names = {0: "1-й (Желтый)", 1: "2-й (Оранжевый)", 2: "3-й (Красный)"}
+    if child["squares"][idx] != "gray":
+        child["squares"][idx] = "gray"
+        child["timers"][idx] = 0
+        add_log(f"В режиме редактирования сброшен {color_names.get(idx)} квадрат у {name}.")
+
+def handle_modify_penalty(name: str, operation: str):
+    child = CHILDREN_DATA[name]
+    if not child["edit_mode"]:
+        return
+
+    if operation == "inc":
+        child["penalty_minutes"] += 20
+        add_log(f"В режиме редактирования добавлено +20 минут штрафа у {name}. Всего: {child['penalty_minutes']}м.")
+    elif operation == "dec":
         if child["penalty_minutes"] >= 20:
             child["penalty_minutes"] -= 20
-            add_log(f"В режиме редактирования отменено 20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
-    else:
-        idx = int(element)
-        color_names = {0: "1-й (Желтый)", 1: "2-й (Оранжевый)", 2: "3-й (Красный)"}
-        if child["squares"][idx] != "gray":
-            child["squares"][idx] = "gray"
-            child["timers"][idx] = 0
-            add_log(f"В режиме редактирования сброшен {color_names.get(idx)} квадрат у {name}.")
+            add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
 async def auto_disable_edit_mode(name: str):
     await asyncio.sleep(5)
@@ -530,14 +716,19 @@ async def tick_processing():
         await broadcast_state(play_sound=False)
 
 async def broadcast_state(play_sound: bool = False):
-    if active_connections:
-        payload = {
-            "data": CHILDREN_DATA,
-            "play_sound": play_sound,
-            "logs": SYSTEM_LOGS
-        }
-        tasks = [connection.send_json(payload) for connection in active_connections]
-        await asyncio.gather(*tasks, return_exceptions=True)
+    if ACTIVE_CONNECTIONS:
+        # Каждому клиенту шлем общие данные + его личный статус админа
+        for ws, client_info in list(ACTIVE_CONNECTIONS.items()):
+            payload = {
+                "data": CHILDREN_DATA,
+                "play_sound": play_sound,
+                "logs": SYSTEM_LOGS,
+                "is_admin": client_info["is_admin"]
+            }
+            try:
+                await ws.send_json(payload)
+            except Exception:
+                pass
 
 @app.on_event("startup")
 async def startup_event():
@@ -547,14 +738,50 @@ async def startup_event():
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    active_connections.append(websocket)
-    await websocket.send_json({"data": CHILDREN_DATA, "play_sound": False, "logs": SYSTEM_LOGS})
+    # Регистрируем устройство на сервере со статусом "не админ" по умолчанию
+    ACTIVE_CONNECTIONS[websocket] = {"id": str(uuid.uuid4()), "is_admin": False}
+    
+    # Первичный пакет данных для подключившегося устройства
+    await websocket.send_json({
+        "data": CHILDREN_DATA, 
+        "play_sound": False, 
+        "logs": SYSTEM_LOGS,
+        "is_admin": False
+    })
+    
     try:
         while True:
             data = await websocket.receive_json()
             action = data.get("action")
             name = data.get("name")
             
+            # Проверяем, авторизован ли текущий клиент как администратор
+            client_info = ACTIVE_CONNECTIONS.get(websocket, {"is_admin": False})
+            is_client_admin = client_info["is_admin"]
+            
+            # Действия авторизации (доступны всем)
+            if action == "admin_login":
+                password = data.get("password")
+                if password == ADMIN_PASSWORD:
+                    ACTIVE_CONNECTIONS[websocket]["is_admin"] = True
+                    add_log("Устройство успешно вошло в режим Администратора.")
+                    await broadcast_state(play_sound=True)
+                continue
+                
+            elif action == "admin_logout":
+                ACTIVE_CONNECTIONS[websocket]["is_admin"] = False
+                add_log("Устройство вышло из режима Администратора.")
+                await broadcast_state(play_sound=False)
+                continue
+                
+            elif action == "request_logs":
+                await websocket.send_json({"logs": SYSTEM_LOGS})
+                continue
+
+            # Защищенные действия (требуют прав "А" на этом устройстве)
+            if not is_client_admin:
+                continue
+
             if action == "click":
                 handle_click(name)
                 await broadcast_state(play_sound=True)
@@ -572,11 +799,14 @@ async def websocket_endpoint(websocket: WebSocket):
                 handle_cancel(name, element)
                 await broadcast_state(play_sound=True)
                 
-            elif action == "request_logs":
-                await websocket.send_json({"logs": SYSTEM_LOGS})
+            elif action == "modify_penalty":
+                operation = data.get("operation")
+                handle_modify_penalty(name, operation)
+                await broadcast_state(play_sound=True)
                 
     except WebSocketDisconnect:
-        active_connections.remove(websocket)
+        if websocket in ACTIVE_CONNECTIONS:
+            del ACTIVE_CONNECTIONS[websocket]
 
 if __name__ == "__main__":
     import uvicorn
