@@ -128,7 +128,6 @@ HTML_TEMPLATE = """
             border-radius: 14px; 
             position: relative;
             display: flex; 
-            flex-direction: column;
             justify-content: center; 
             align-items: center; 
             border: 3px solid #444454;
@@ -140,23 +139,14 @@ HTML_TEMPLATE = """
             padding: 0;
         }
 
-        /* Маленькая цифра кубика в левом верхнем углу */
-        .square span {
-            position: absolute;
-            top: 6px;
-            left: 8px;
-            font-size: 13px; 
-            font-weight: bold;
-            opacity: 0.8;
-            line-height: 1;
-        }
-
-        /* Огромный цифровой таймер */
+        /* Таймер стал ещё крупнее и находится строго по центру кубика */
         .square strong {
-            font-size: 32px; 
+            font-size: 36px; 
             font-weight: 900;
             display: block;
             letter-spacing: -0.5px;
+            text-align: center;
+            line-height: 90px;
         }
         
         .gray { background-color: #3d3d4e !important; color: #ffffff !important; border-color: #555568; }
@@ -173,14 +163,13 @@ HTML_TEMPLATE = """
             display: flex; 
             justify-content: center; 
             align-items: center; 
-            font-size: 38px; /* Огромный чистый шрифт под новый формат */
+            font-size: 38px; 
             font-weight: 900; 
             color: #ff5252 !important; 
             box-sizing: border-box;
             letter-spacing: -1px;
         }
 
-        /* Контейнер регулировки штрафа */
         .penalty-edit-container {
             width: 23%;
             height: 90px;
@@ -377,9 +366,9 @@ HTML_TEMPLATE = """
             <div id="card_ERIC" class="user-card">
                 <button id="name_ERIC" class="name-btn">ERIC</button>
                 <div class="controls-row">
-                    <button id="sq_ERIC_0" class="square"><span>1</span><strong id="t_ERIC_0"></strong></button>
-                    <button id="sq_ERIC_1" class="square"><span>2</span><strong id="t_ERIC_1"></strong></button>
-                    <button id="sq_ERIC_2" class="square"><span>3</span><strong id="t_ERIC_2"></strong></button>
+                    <button id="sq_ERIC_0" class="square"><strong id="t_ERIC_0"></strong></button>
+                    <button id="sq_ERIC_1" class="square"><strong id="t_ERIC_1"></strong></button>
+                    <button id="sq_ERIC_2" class="square"><strong id="t_ERIC_2"></strong></button>
                     
                     <div id="p_view_ERIC" class="cell-x">-00:00</div>
                     
@@ -395,9 +384,9 @@ HTML_TEMPLATE = """
             <div id="card_NICK" class="user-card">
                 <button id="name_NICK" class="name-btn">NICK</button>
                 <div class="controls-row">
-                    <button id="sq_NICK_0" class="square"><span>1</span><strong id="t_NICK_0"></strong></button>
-                    <button id="sq_NICK_1" class="square"><span>2</span><strong id="t_NICK_1"></strong></button>
-                    <button id="sq_NICK_2" class="square"><span>3</span><strong id="t_NICK_2"></strong></button>
+                    <button id="sq_NICK_0" class="square"><strong id="t_NICK_0"></strong></button>
+                    <button id="sq_NICK_1" class="square"><strong id="t_NICK_1"></strong></button>
+                    <button id="sq_NICK_2" class="square"><strong id="t_NICK_2"></strong></button>
                     
                     <div id="p_view_NICK" class="cell-x">-00:00</div>
                     
@@ -491,7 +480,6 @@ HTML_TEMPLATE = """
         } catch (e) {}
     }
 
-    // Чистый цифровой формат без букв MM:SS
     function formatTime(seconds) {
         if (seconds <= 0) return "";
         var m = Math.floor(seconds / 60);
@@ -499,7 +487,6 @@ HTML_TEMPLATE = """
         return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
     }
 
-    // Чистый цифровой формат штрафа -ЧЧ:ММ
     function formatPenalty(minutes) {
         var h = Math.floor(minutes / 60);
         var m = minutes % 60;
@@ -700,9 +687,13 @@ async def get():
 
 def handle_click(name: str):
     child = CHILDREN_DATA[name]
+    
+    # Если режим редактирования активен — обычный клик по имени СБРАСЫВАЕТ (обнуляет) его досрочно
     if child["edit_mode"]:
+        child["edit_mode"] = False
+        add_log(f"Режим редактирования для {name} закрыт вручную кликом по имени.")
         return
-        
+
     squares = child["squares"]
     if squares[0] == "gray":
         child["squares"][0] = "yellow"
@@ -747,10 +738,11 @@ def handle_modify_penalty(name: str, operation: str):
             add_log(f"В режиме редактирования снято -20 минут штрафа у {name}. Осталось: {child['penalty_minutes']}м.")
 
 async def auto_disable_edit_mode(name: str):
+    # Теперь таймаут составляет 15 секунд
     await asyncio.sleep(15)
     if CHILDREN_DATA[name]["edit_mode"]:
         CHILDREN_DATA[name]["edit_mode"] = False
-        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту.")
+        add_log(f"Режим редактирования для {name} автоматически закрыт по таймауту (15 сек).")
         await broadcast_state(play_sound=False)
 
 async def tick_processing():
@@ -819,7 +811,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 password = data.get("password")
                 if password == ADMIN_PASSWORD:
                     ACTIVE_CONNECTIONS[websocket]["is_admin"] = True
-                    add_log("Устройство успешно вошло в...</message>")
+                    add_log("Устройство успешно вошло в режим Администратора.")
                     await broadcast_state(play_sound=True)
                 continue
                 
@@ -843,7 +835,7 @@ async def websocket_endpoint(websocket: WebSocket):
             elif action == "long_press":
                 CHILDREN_DATA[name]["edit_mode"] = not CHILDREN_DATA[name]["edit_mode"]
                 state_str = "активирован" if CHILDREN_DATA[name]["edit_mode"] else "деактивирован"
-                add_log(f"Режим редактирования для {name} {state_str} вручную удержанием.")
+                add_log(f"Режим редактирования для {name} {state_str} удержанием.")
                 await broadcast_state(play_sound=True)
                 if CHILDREN_DATA[name]["edit_mode"]:
                     asyncio.create_task(auto_disable_edit_mode(name))
