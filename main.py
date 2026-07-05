@@ -9,7 +9,7 @@ from pydantic import BaseModel
 app = FastAPI()
 
 # Пароль для активации режима Администратора
-ADMIN_PASSWORD = "1234"
+ADMIN_PASSWORD = "3003"
 TIMER_DURATION = 20 * 60 
 
 CHILDREN_DATA = {
