@@ -1,11 +1,11 @@
 import os
+import json
 import asyncio
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 app = FastAPI()
 
-# Базовые данные приложения
 CHILDREN_DATA = {
     "ERIK": {
         "squares": ["gray", "gray", "gray"],
@@ -19,6 +19,10 @@ CHILDREN_DATA = {
     }
 }
 
+SYSTEM_FLAGS = {
+    "play_sound": False
+}
+
 TIMER_DURATION = 20 * 60 
 
 def format_time(seconds):
@@ -28,9 +32,9 @@ def format_time(seconds):
     m = (seconds % 3600) // 60
     s = seconds % 60
     if h > 0:
-        return f"{h}h{m}m"
+        return f"{h}h"
     if m > 0:
-        return f"{m}m{s}s"
+        return f"{m}m"
     return f"{s}s"
 
 def format_penalty(minutes):
@@ -44,148 +48,260 @@ def format_penalty(minutes):
 
 @app.get("/")
 async def get_dashboard():
-    # Генерируем HTML-контент динамически на стороне сервера при каждом обновлении
-    
-    table_rows = ""
-    for name, info in CHILDREN_DATA.items():
-        t0 = format_time(info["timers"][0])
-        t1 = format_time(info["timers"][1])
-        t2 = format_time(info["timers"][2])
-        penalty = format_penalty(info["penalty_minutes"])
-        
-        table_rows += f"""
-        <div class="row row-border">
-            <div class="cell cell-name">
-                <a class="name-btn" href="/click/{name}">{name}</a>
-            </div>
-            <div class="cell cell-square"><div class="square {info['squares'][0]}">{t0}</div></div>
-            <div class="cell cell-square"><div class="square {info['squares'][1]}">{t1}</div></div>
-            <div class="cell cell-square"><div class="square {info['squares'][2]}">{t2}</div></div>
-            <div class="cell cell-penalty"><div class="cell-x">{penalty}</div></div>
-        </div>
-        """
-
-    # Вставляем тег мета-обновления, который принудительно обновляет страницу раз в 1 секунду
-    html_content = f"""
+    # Главная страница: крупный интерфейс без мерцания
+    html_content = """
     <!DOCTYPE html>
     <html lang="ru">
     <head>
         <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <meta http-equiv="refresh" content="1">
-        <title>Панель Контроля Времени</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+        <title>Ч У П Р А</title>
         <style>
-            body {{
-                font-family: Arial, sans-serif;
+            html, body {
+                height: 100%;
+                margin: 0;
+                padding: 0;
                 background-color: #141419;
                 color: #ffffff;
-                margin: 0;
-                padding: 20px;
-            }}
-            .container {{ 
-                width: 100%; 
-                max-width: 600px; 
-                margin: 0 auto;
-            }}
-            h2 {{ text-align: center; color: #a0a0ab; margin-bottom: 30px; }}
-            
-            .table {{ 
-                background-color: #1e1e24; 
-                border-radius: 12px; 
-                padding: 15px; 
-                box-shadow: 0 8px 24px rgba(0,0,0,0.5); 
-                display: table;
-                width: 100%;
+                font-family: Arial, sans-serif;
+                overflow: hidden;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                height: 100vh;
+                width: 100vw;
                 box-sizing: border-box;
-            }}
-            .row {{ 
-                display: table-row;
-            }}
-            .cell {{
-                display: table-cell;
-                vertical-align: middle;
-                padding: 10px 5px;
+                padding: 2vh 2vw;
+            }
+            h2 {
                 text-align: center;
-            }}
-            .cell-name {{
-                text-align: left;
-                width: 30%;
-            }}
-            .cell-square {{
-                width: 15%;
-            }}
-            .cell-penalty {{
-                width: 25%;
-            }}
-            
-            .header .cell {{ 
-                font-weight: bold; 
-                color: #8b8b98; 
-                border-bottom: 2px solid #3d3d4e; 
-                padding-bottom: 10px; 
-            }}
-            .row-border .cell {{
+                color: #a0a0ab;
+                margin: 0 0 2vh 0;
+                font-size: 4vh;
+                height: 5vh;
+            }
+            .table {
+                display: flex;
+                flex-direction: column;
+                flex-grow: 1;
+                background-color: #1e1e24;
+                border-radius: 16px;
+                padding: 2vh;
+                box-shadow: 0 12px 36px rgba(0,0,0,0.5);
+                box-sizing: border-box;
+            }
+            .row {
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                width: 100%;
+            }
+            .header {
+                height: 6vh;
+                border-bottom: 3px solid #3d3d4e;
+                font-weight: bold;
+                color: #8b8b98;
+                font-size: 3vh;
+            }
+            .row-user {
+                flex-grow: 1;
                 border-bottom: 1px solid #2d2d38;
-            }}
-            
-            .name-btn {{ 
-                display: block;
-                background-color: #2b2b36; 
-                color: #fff; 
-                border: 1px solid #444454; 
-                padding: 12px 8px; 
-                border-radius: 8px; 
-                font-size: 15px; 
-                font-weight: bold; 
-                text-align: center;
+            }
+            .row-user:last-child {
+                border-bottom: none;
+            }
+            .cell {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 0 1vw;
+                box-sizing: border-box;
+                height: 100%;
+            }
+            .cell-name { width: 30%; justify-content: flex-start; }
+            .cell-square { width: 15%; }
+            .cell-penalty { width: 25%; }
+
+            .name-btn {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background-color: #2b2b36;
+                color: #fff;
+                border: 2px solid #444454;
+                border-radius: 12px;
+                font-size: 4.5vh;
+                font-weight: bold;
                 text-decoration: none;
+                width: 100%;
+                height: 85%;
                 box-sizing: border-box;
                 -webkit-appearance: none;
-            }}
-            .square {{ 
-                border-radius: 6px; 
-                display: block; 
-                height: 50px; 
-                line-height: 50px;
-                font-size: 11px; 
-                font-weight: bold; 
-                color: #fff; 
-                text-shadow: 1px 1px 2px rgba(0,0,0,0.8); 
+            }
+            .name-btn:active {
+                background-color: #3d3d4e;
+            }
+            .square {
+                border-radius: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                height: 85%;
+                font-size: 3.5vh;
+                font-weight: bold;
+                color: #fff;
+                text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
                 box-sizing: border-box;
-            }}
-            .gray {{ background-color: #3d3d4e; }}
-            .yellow {{ background-color: #fbc02d; color: #000; text-shadow: none; }}
-            .orange {{ background-color: #ef6c00; }}
-            .red {{ background-color: #c62828; }}
-            
-            .cell-x {{ 
-                background-color: #141419; 
-                border: 1px dashed #c62828; 
-                border-radius: 8px; 
-                height: 50px; 
-                line-height: 50px;
-                font-size: 16px; 
-                font-weight: bold; 
-                color: #ff5252; 
-                display: block;
+            }
+            .gray { background-color: #3d3d4e; }
+            .yellow { background-color: #fbc02d; color: #000; text-shadow: none; }
+            .orange { background-color: #ef6c00; }
+            .red { background-color: #c62828; }
+
+            .cell-x {
+                background-color: #141419;
+                border: 2px dashed #c62828;
+                border-radius: 12px;
+                width: 100%;
+                height: 85%;
+                font-size: 4.5vh;
+                font-weight: bold;
+                color: #ff5252;
+                display: flex;
+                align-items: center;
+                justify-content: center;
                 box-sizing: border-box;
-            }}
+            }
+            #hidden-loader {
+                display: none;
+            }
         </style>
     </head>
-    <body>
+    <body onclick="initAudio()">
     <div class="container">
-        <h2>Монитор2</h2>
+        <h2>Мониторинг Наказаний</h2>
         <div class="table">
-            <div class="row header">
+            <div class="header row">
                 <div class="cell cell-name">Имя</div>
                 <div class="cell cell-square">1</div>
                 <div class="cell cell-square">2</div>
                 <div class="cell cell-square">3</div>
                 <div class="cell cell-penalty">Ячейка Х</div>
             </div>
-            {table_rows}
+            
+            <!-- Строка Эрика -->
+            <div class="row row-user" id="row-ERIK">
+                <div class="cell cell-name"><a class="name-btn" href="/click/ERIK" target="hidden-loader">ERIK</a></div>
+                <div class="cell cell-square"><div id="ERIK-sq0" class="square gray"></div></div>
+                <div class="cell cell-square"><div id="ERIK-sq1" class="square gray"></div></div>
+                <div class="cell cell-square"><div id="ERIK-sq2" class="square gray"></div></div>
+                <div class="cell cell-penalty"><div id="ERIK-txtX" class="cell-x">0m</div></div>
+            </div>
+
+            <!-- Строка Ника -->
+            <div class="row row-user" id="row-NICK">
+                <div class="cell cell-name"><a class="name-btn" href="/click/NICK" target="hidden-loader">NICK</a></div>
+                <div class="cell cell-square"><div id="NICK-sq0" class="square gray"></div></div>
+                <div class="cell cell-square"><div id="NICK-sq1" class="square gray"></div></div>
+                <div class="cell cell-square"><div id="NICK-sq2" class="square gray"></div></div>
+                <div class="cell cell-penalty"><div id="NICK-txtX" class="cell-x">0m</div></div>
+            </div>
         </div>
     </div>
+
+    <!-- Абсолютно скрытый фрейм, который раз в секунду запрашивает данные в фоне без мерцания экрана -->
+    <iframe id="hidden-loader" name="hidden-loader" src="/iframe-data"></iframe>
+
+    <script>
+        var audioCtx = null;
+        function initAudio() {
+            if (!audioCtx) {
+                try {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    var buffer = audioCtx.createBuffer(1, 1, 22050);
+                    var source = audioCtx.createBufferSource();
+                    source.buffer = buffer;
+                    source.connect(audioCtx.destination);
+                    if (source.start) { source.start(0); } else if (source.noteOn) { source.noteOn(0); }
+                } catch (e) { console.log("Audio Init Error"); }
+            }
+        }
+
+        function playBeep() {
+            initAudio();
+            if (!audioCtx) return;
+            try {
+                var oscillator = audioCtx.createOscillator();
+                var gainNode = audioCtx.createGain();
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); 
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime); 
+                gainNode.gain.linearRampToValueAtTime(0.01, audioCtx.currentTime + 0.2); 
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                if (oscillator.start) { oscillator.start(0); } else if (oscillator.noteOn) { oscillator.noteOn(0); }
+                if (oscillator.stop) { oscillator.stop(audioCtx.currentTime + 0.2); } else if (oscillator.noteOff) { oscillator.noteOff(audioCtx.currentTime + 0.2); }
+            } catch (e) { console.log("Sound Error"); }
+        }
+
+        // Функция обновления DOM, вызываемая из скрытого фрейма
+        window.updateDOM = function(id, className, innerHTML) {
+            var el = document.getElementById(id);
+            if (el) {
+                if (el.className !== className) el.className = className;
+                if (el.innerHTML !== innerHTML) el.innerHTML = innerHTML;
+            }
+        };
+
+        window.triggerSound = function() {
+            playBeep();
+        };
+
+        // Заставляем iframe обновляться раз в секунду в фоновом режиме
+        setInterval(function() {
+            var iframe = document.getElementById('hidden-loader');
+            if (iframe) {
+                iframe.src = "/iframe-data?ts=" + new Date().getTime();
+            }
+        }, 1000);
+    </script>
+    </body>
+    </html>
+    """
+    return HTMLResponse(content=html_content)
+
+@app.get("/iframe-data")
+async def get_iframe_data(ts: str = None):
+    # Эта страница грузится внутри скрытого фрейма и передает команды наверх в основное окно
+    sound_trigger = ""
+    if SYSTEM_FLAGS["play_sound"]:
+        SYSTEM_FLAGS["play_sound"] = False
+        sound_trigger = "window.parent.triggerSound();"
+
+    js_commands = ""
+    for name, info in CHILDREN_DATA.items():
+        t0 = format_time(info["timers"][0])
+        t1 = format_time(info["timers"][1])
+        t2 = format_time(info["timers"][2])
+        penalty = format_penalty(info["penalty_minutes"])
+        
+        js_commands += f"window.parent.updateDOM('{name}-sq0', 'square {info['squares'][0]}', '{t0}');"
+        js_commands += f"window.parent.updateDOM('{name}-sq1', 'square {info['squares'][1]}', '{t1}');"
+        js_commands += f"window.parent.updateDOM('{name}-sq2', 'square {info['squares'][2]}', '{t2}');"
+        js_commands += f"window.parent.updateDOM('{name}-txtX', 'cell-x', '{penalty}');"
+
+    html_content = f"""
+    <html>
+    <head><meta http-equiv="refresh" content="1"></head>
+    <body>
+    <script>
+        try {{
+            {sound_trigger}
+            {js_commands}
+        }} catch(e) {{}}
+    </script>
     </body>
     </html>
     """
@@ -208,8 +324,10 @@ async def process_click(name: str):
         elif squares[2] == "red":
             child["penalty_minutes"] += 20
             
-    # После обработки клика мгновенно перенаправляем пользователя обратно на главную страницу
-    return RedirectResponse(url="/", status_code=303)
+        SYSTEM_FLAGS["play_sound"] = True
+            
+    # Перенаправляем скрытый фрейм на пустую страницу обновления данных
+    return RedirectResponse(url="/iframe-data", status_code=303)
 
 async def tick_processing():
     while True:
