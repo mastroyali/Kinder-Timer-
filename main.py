@@ -139,7 +139,7 @@ HTML_TEMPLATE = """
             padding: 0;
         }
 
-        /* Таймер стал ещё крупнее и находится строго по центру кубика */
+        /* */
         .square strong {
             font-size: 55px; 
             font-weight: 900;
